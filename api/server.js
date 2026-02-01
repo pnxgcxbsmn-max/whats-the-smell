@@ -228,79 +228,21 @@ function extractCharacterNameFromSheet(text) {
 
 // Utility: Image processing helper - optimize for WebP & size
 async function optimizeImage(buffer, maxWidth = 512, quality = 75) {
-  try {
-    if (!buffer || buffer.length === 0) {
-      throw new Error("Empty buffer");
-    }
-
-    // Start with fresh sharp instance
-    let pipeline = sharp(buffer);
-    
-    // Get metadata without awaiting yet - build the chain
-    const metadata = await pipeline.metadata().catch(err => {
-      console.warn("Sharp metadata failed, skipping optimization:", err.message);
-      return null;
-    });
-    
-    if (!metadata || !metadata.width || !metadata.height) {
-      console.warn("Invalid metadata, returning original buffer");
-      return buffer;
-    }
-    
-    // Create fresh pipeline for transformation
-    pipeline = sharp(buffer);
-    
-    // Resize if needed
-    if (metadata.width > maxWidth) {
-      const newHeight = Math.round((maxWidth / metadata.width) * metadata.height);
-      pipeline = pipeline.resize(maxWidth, newHeight, {
-        fit: 'contain',
-        withoutEnlargement: true
-      });
-      console.log(`AI-Image: Resizing from ${metadata.width}x${metadata.height} to ${maxWidth}x${newHeight}`);
-    }
-    
-    // Convert to WebP
-    const optimized = await pipeline.webp({ quality }).toBuffer();
-    
-    if (!optimized || optimized.length === 0) {
-      console.warn("WebP conversion returned empty buffer, using original");
-      return buffer;
-    }
-    
-    console.log(`AI-Image: Optimization complete - ${buffer.length} → ${optimized.length} bytes (${Math.round((1 - optimized.length / buffer.length) * 100)}% reduction)`);
-    return optimized;
-  } catch (e) {
-    console.error("Image optimization error:", e.message);
-    return buffer; // Return original if optimization fails
+  // Optimization disabled - sharp dependency removed for Railway compatibility
+  // Simply return the original buffer
+  if (!buffer || buffer.length === 0) {
+    throw new Error("Empty buffer");
   }
+  console.log(`AI-Image: Image optimization skipped (sharp not available) - returning original buffer`);
+  return buffer;
 }
 
 // Utility: Image processing helper (kept for future use)
 async function cropWatermark(buffer) {
-  try {
-    const metadata = await sharp(buffer).metadata();
-    if (!metadata.width || !metadata.height) return buffer;
-    
-    // Optional image cropping
-    const cropPercentage = 0.15;
-    const cropPixels = Math.floor(metadata.height * cropPercentage);
-    const cropHeight = metadata.height - cropPixels;
-    
-    const cropped = await sharp(buffer)
-      .extract({
-        left: 0,
-        top: 0,
-        width: metadata.width,
-        height: Math.floor(cropHeight)
-      })
-      .toBuffer();
-    
-    return cropped;
-  } catch (e) {
-    console.warn("Image crop failed:", e.message);
-    return buffer;
-  }
+  // Image cropping disabled - sharp dependency removed
+  // Simply return the original buffer
+  console.log(`AI-Image: Image cropping skipped (sharp not available) - returning original buffer`);
+  return buffer;
 }
 
 
