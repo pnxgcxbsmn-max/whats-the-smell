@@ -14,6 +14,11 @@
       window.location.port === "3000";
 
     if (isLocal3000) return "http://localhost:5051";
+    
+    // Production: use Railway API
+    const isProduction = window.location.hostname !== "localhost";
+    if (isProduction) return "https://whats-the-smell-production.up.railway.app";
+    
     return window.location.origin.replace(/\/+$/, "");
   })();
 
