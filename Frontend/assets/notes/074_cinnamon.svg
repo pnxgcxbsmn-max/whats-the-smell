@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 64 64" role="img" aria-label="Cinnamon">
+  <defs>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="2.2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7cf" stop-opacity="0.95"/>
+      <stop offset="1" stop-color="#b7ffcf" stop-opacity="0.75"/>
+    </linearGradient>
+  </defs>
+  <rect x="6" y="6" width="52" height="52" rx="14" fill="#07080a" stroke="url(#g)" stroke-opacity="0.28"/>
+  <g filter="url(#glow)" color="#8fe8ff" opacity="0.98">
+    <path d="M24 18 L40 18 L36 28 L28 28 Z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M28 28 C26 36 26 44 28 50 H36 C38 44 38 36 36 28 Z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M26 34 H38" stroke="currentColor" stroke-width="2" opacity="0.7"/>
+  </g>
+  <text x="32" y="60" font-size="8" text-anchor="middle" fill="#9fb3c8" opacity="0.85">#074</text>
+</svg>

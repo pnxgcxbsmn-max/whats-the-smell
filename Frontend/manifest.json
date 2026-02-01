@@ -1,0 +1,10 @@
+{
+  "name": "What's the Smell?",
+  "short_name": "Smell",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#111111",
+  "theme_color": "#111111",
+  "description": "Discover what characters would smell like based on their world, habits and personality."
+}
+

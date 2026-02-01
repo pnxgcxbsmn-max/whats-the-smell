@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 64 64" role="img" aria-label="Water">
+  <defs>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="2.2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7cf" stop-opacity="0.95"/>
+      <stop offset="1" stop-color="#b7ffcf" stop-opacity="0.75"/>
+    </linearGradient>
+  </defs>
+  <rect x="6" y="6" width="52" height="52" rx="14" fill="#07080a" stroke="url(#g)" stroke-opacity="0.28"/>
+  <g filter="url(#glow)" color="#8fe8ff" opacity="0.98">
+    <path d="M32 12 C26 22 22 28 22 36 C22 46 26 52 32 54 C38 52 42 46 42 36 C42 28 38 22 32 12 Z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M24 40 C28 44 36 44 40 40" fill="none" stroke="currentColor" stroke-width="2"/>
+  </g>
+  <text x="32" y="60" font-size="8" text-anchor="middle" fill="#9fb3c8" opacity="0.85">#031</text>
+</svg>

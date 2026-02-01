@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 64 64" role="img" aria-label="Tea Leaf">
+  <defs>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="2.2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7cf" stop-opacity="0.95"/>
+      <stop offset="1" stop-color="#b7ffcf" stop-opacity="0.75"/>
+    </linearGradient>
+  </defs>
+  <rect x="6" y="6" width="52" height="52" rx="14" fill="#07080a" stroke="url(#g)" stroke-opacity="0.28"/>
+  <g filter="url(#glow)" color="#8fe8ff" opacity="0.98">
+    <path d="M18 38 C18 24 30 18 44 18 C44 34 34 46 22 46 C20 46 18 44 18 42 Z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M22 44 C28 36 34 30 44 22" fill="none" stroke="currentColor" stroke-width="2"/>
+  </g>
+  <text x="32" y="60" font-size="8" text-anchor="middle" fill="#9fb3c8" opacity="0.85">#059</text>
+</svg>

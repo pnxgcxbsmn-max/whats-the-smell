@@ -1,0 +1,1776 @@
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="public, max-age=3600" />
+  <meta http-equiv="Pragma" content="public" />
+  <meta http-equiv="Expires" content="3600" />
+  <meta name="description" content="Fragrance identification for fictional characters" />
+
+  <!-- Development Environment Setup -->
+  <script>
+    // Enable development mode - skip gate for localhost testing
+    // Un-comment the line below to skip the beta access gate when developing locally
+    // localStorage.setItem('WTS_SKIP_GATE', 'true');
+    
+    // Console helper for development
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      window.enableDevMode = function() {
+        localStorage.setItem('WTS_SKIP_GATE', 'true');
+        console.log('%c✅ Development mode ENABLED - Gate will be skipped on next reload', 'color: lime; font-size: 14px; font-weight: bold;');
+        location.reload();
+      };
+      console.log('%c💡 Development Mode Available', 'color: cyan; font-size: 16px; font-weight: bold;');
+      console.log('%c Type: enableDevMode() to skip the beta access gate', 'color: cyan; font-size: 12px;');
+    }
+  </script>
+
+  <!-- Cloudflare Domain Recognition -->
+  <meta name="theme-color" content="#0b0f1a" />
+  <meta property="og:url" content="https://whatsthesmell.pages.dev" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="What's the Smell?" />
+  <meta property="og:description" content="Fragrance identification for fictional characters" />
+  <meta property="og:image" content="assets/brand/logo-en.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="What's the Smell?" />
+  <meta name="twitter:description" content="Fragrance identification for fictional characters" />
+  
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="What's the Smell?" />
+
+  <link rel="canonical" href="https://whatsthesmell.pages.dev" />
+  <link rel="preconnect" href="https://whatsthesmell.pages.dev" />
+  <link rel="dns-prefetch" href="https://whatsthesmell.pages.dev" />
+  
+  <link rel="manifest" href="/manifest.webmanifest">
+
+  <link rel="apple-touch-icon" href="assets/brand/logo-en.png" />
+
+  <title>What's the Smell?</title>
+</head>
+
+
+  <style>
+    :root {
+      --ac: #f0f0f0;
+      --bg: #0f0f1e;
+      --fg: #fff;
+      --muted: #aaa;
+      --text: #fff;
+      --line: rgba(255, 255, 255, 0.2);
+
+      --ddH: 270px;
+      --ddGap: 8px;
+
+      --btn-height: 44px;
+      --btn-gap: 8px;
+    
+  --fieldW: 260px;
+  --fieldH: 44px;
+  --trailBgImg: url("assets/buttons/new-trail-bg.png");}
+
+    *{ box-sizing:border-box; }
+
+    body{
+      margin:0;
+      padding:26px;
+      color:var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+      background:
+        radial-gradient(1200px 700px at 60% 45%, rgba(255,255,255,.10), rgba(0,0,0,.15) 60%, rgba(0,0,0,.30) 100%),
+        url("assets/bg/Background.png");
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      background-attachment: fixed;
+      position: relative;
+      min-height: 100vh;
+    }
+
+    /* ===== Top ===== */
+    .topbar{
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+      margin-bottom:20px;
+      gap:16px;
+      padding-left: 0;
+    }
+
+    /* ===== App Logo (BIG, NO BOX, only aura) ===== */
+    .appLogo{
+      position: relative;
+      display:flex;
+      align-items:center;
+      justify-content:flex-start;
+      width: 280px;
+      height: 120px;
+      margin-left: 0;
+      margin-top:0;
+      padding: 0;
+      background: transparent;
+      border: 0;
+      box-shadow: none;
+      overflow: visible;
+      flex-shrink: 0;
+    }
+
+    /* Logo ocupa el área sin “encierro” */
+    #appLogoImg{
+      position: relative;
+      z-index: 3;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      /* sombra/relieve del logo */
+      filter:
+        drop-shadow(0 18px 34px rgba(0,0,0,.48))
+        drop-shadow(0 2px 14px rgba(255,255,255,.22));
+      transform: translateZ(0);
+    }
+
+    /* ===== Aura/Glow detrás (NO caja) ===== */
+    .appLogo::before{
+      content:"";
+      position:absolute;
+      z-index: 1;
+
+      /* Glow “libre” detrás del logo (sin formar rectángulo) */
+      left: -5%;
+      top: -8%;
+      width: 50%;
+      height: 110%;
+      pointer-events:none;
+      background:
+        radial-gradient(100px 80px at 40% 55%, rgba(255,255,255,.12), rgba(0,0,0,0) 60%),
+        radial-gradient(120px 90px at 55% 45%, rgba(120,210,255,.12), rgba(0,0,0,0) 65%),
+        radial-gradient(130px 100px at 45% 70%, rgba(255,120,220,.10), rgba(0,0,0,0) 70%),
+        radial-gradient(140px 110px at 65% 70%, rgba(190,255,180,.08), rgba(0,0,0,0) 75%);
+      filter: blur(10px) saturate(1.15);
+      opacity: .25;
+      transform: translateX(-2%) scale(1);
+      animation: logoAura 6.6s ease-in-out infinite;
+    }
+
+    /* ===== Mist / esencia que se mueve (sutil) ===== */
+    .appLogo::after{
+      content:"";
+      position:absolute;
+      z-index: 2;
+      left: -3%;
+      top: -3%;
+      width: 55%;
+      height: 105%;
+      pointer-events:none;
+      background:
+        radial-gradient(80px 60px at 30% 55%, rgba(255,255,255,.02), rgba(0,0,0,0) 60%),
+        radial-gradient(90px 70px at 55% 35%, rgba(120,210,255,.02), rgba(0,0,0,0) 65%),
+        radial-gradient(95px 75px at 60% 75%, rgba(255,120,220,.02), rgba(0,0,0,0) 68%);
+      filter: blur(12px) saturate(1.1);
+      opacity: .15;
+      transform: translateX(0) translateY(0);
+      animation: logoMist 4.8s ease-in-out infinite;
+    }
+
+    /* Animaciones: aura “respira” */
+    @keyframes logoAura{
+      0% { transform: translateX(-2%) translateY(1%) scale(1); opacity:.90; }
+      50%{ transform: translateX(3%)  translateY(-2%) scale(1.06); opacity:1; }
+      100%{transform: translateX(-2%) translateY(1%) scale(1); opacity:.90;}
+    }
+
+    /* Mist: “evaporación” suave */
+    @keyframes logoMist{
+      0% { transform: translateX(-2%) translateY(2%); opacity:.62; }
+      50%{ transform: translateX(4%)  translateY(-3%); opacity:.82; }
+      100%{transform: translateX(-2%) translateY(2%); opacity:.62;}
+    }
+
+    /* ===== Swap animation states (used by your JS) ===== */
+    .appLogo.is-swapping #appLogoImg{ animation: logoEvaporate 380ms cubic-bezier(.4,.0,.6,.8) forwards; }
+    .appLogo.is-appearing #appLogoImg{ animation: logoCondense 400ms cubic-bezier(.4,.0,.6,.8) forwards; }
+
+    /* Evaporation effect: logo fades with colorful vapor dissipating */
+    @keyframes logoEvaporate{
+      0% { 
+        opacity:1; 
+        filter: blur(0px) drop-shadow(0 12px 24px rgba(0,0,0,.35)) drop-shadow(0 2px 8px rgba(255,255,255,.15)); 
+        transform: scale(1) translateY(0); 
+      }
+      30% { 
+        opacity:0.8; 
+        filter: blur(6px) drop-shadow(0 0 15px rgba(120,210,255,1)) drop-shadow(0 0 12px rgba(255,120,220,.95)); 
+        transform: scale(0.97) translateY(-6px); 
+      }
+      60% { 
+        opacity:0.3; 
+        filter: blur(12px) drop-shadow(0 0 25px rgba(120,210,255,.9)) drop-shadow(0 0 20px rgba(255,120,220,.85)); 
+        transform: scale(0.90) translateY(-15px); 
+      }
+      100%{ 
+        opacity:0; 
+        filter: blur(24px) drop-shadow(0 0 35px rgba(120,210,255,.7)) drop-shadow(0 0 28px rgba(255,120,220,.6)); 
+        transform: scale(0.80) translateY(-28px); 
+      }
+    }
+
+    /* Condensation effect: logo materializes from vapor */
+    @keyframes logoCondense{
+      0% { 
+        opacity:0; 
+        filter: blur(28px) drop-shadow(0 0 45px rgba(120,210,255,.95)) drop-shadow(0 0 35px rgba(255,120,220,.85)); 
+        transform: scale(0.80) translateY(25px); 
+      }
+      35% { 
+        opacity:0.4; 
+        filter: blur(14px) drop-shadow(0 0 30px rgba(120,210,255,.8)) drop-shadow(0 0 22px rgba(255,120,220,.7)); 
+        transform: scale(0.92) translateY(8px); 
+      }
+      70% { 
+        opacity:0.85; 
+        filter: blur(4px) drop-shadow(0 0 18px rgba(120,210,255,.4)) drop-shadow(0 0 10px rgba(255,120,220,.3)); 
+        transform: scale(1.01) translateY(1px); 
+      }
+      100%{
+        opacity:1; 
+        filter: blur(0px) drop-shadow(0 12px 24px rgba(0,0,0,.35)) drop-shadow(0 2px 8px rgba(255,255,255,.15)); 
+        transform: scale(1) translateY(0);
+      }
+    }
+
+    /* Vapor/smoke overlay during transition */
+    .appLogo.is-swapping::before{
+      animation: vaporDissipate 380ms cubic-bezier(.4,.0,.6,.8) forwards;
+    }
+
+    .appLogo.is-appearing::before{
+      animation: vaporConsolidate 400ms cubic-bezier(.4,.0,.6,.8) forwards;
+    }
+
+    @keyframes vaporDissipate{
+      0% { 
+        opacity:0.9;
+        transform: translateX(-2%) translateY(1%) scale(1);
+        background:
+          radial-gradient(140px 110px at 40% 55%, rgba(120,210,255,.8), rgba(0,0,0,0) 50%),
+          radial-gradient(170px 130px at 55% 45%, rgba(255,120,220,.75), rgba(0,0,0,0) 60%),
+          radial-gradient(180px 140px at 45% 70%, rgba(120,220,255,.6), rgba(0,0,0,0) 65%),
+          radial-gradient(200px 150px at 65% 70%, rgba(255,200,180,.5), rgba(0,0,0,0) 70%);
+        filter: blur(16px) saturate(1.6);
+      }
+      50% { 
+        opacity:0.5;
+        transform: translateX(5%) translateY(-12%) scale(1.2);
+        background:
+          radial-gradient(150px 120px at 42% 52%, rgba(120,210,255,.5), rgba(0,0,0,0) 55%),
+          radial-gradient(180px 140px at 57% 48%, rgba(255,120,220,.45), rgba(0,0,0,0) 62%),
+          radial-gradient(190px 150px at 48% 72%, rgba(120,220,255,.35), rgba(0,0,0,0) 68%),
+          radial-gradient(210px 160px at 68% 72%, rgba(255,200,180,.25), rgba(0,0,0,0) 72%);
+        filter: blur(24px) saturate(1.4);
+      }
+      100%{ 
+        opacity:0;
+        transform: translateX(14%) translateY(-25%) scale(1.6);
+        background:
+          radial-gradient(160px 120px at 40% 55%, rgba(120,210,255,.1), rgba(0,0,0,0) 60%),
+          radial-gradient(210px 140px at 55% 45%, rgba(255,120,220,.08), rgba(0,0,0,0) 70%),
+          radial-gradient(220px 170px at 45% 70%, rgba(120,220,255,.05), rgba(0,0,0,0) 75%),
+          radial-gradient(240px 190px at 65% 70%, rgba(255,200,180,.02), rgba(0,0,0,0) 78%);
+        filter: blur(36px) saturate(1.2);
+      }
+    }
+
+    @keyframes vaporConsolidate{
+      0% { 
+        opacity:0;
+        transform: translateX(14%) translateY(-25%) scale(1.6);
+        background:
+          radial-gradient(160px 120px at 40% 55%, rgba(120,210,255,.1), rgba(0,0,0,0) 60%),
+          radial-gradient(210px 140px at 55% 45%, rgba(255,120,220,.08), rgba(0,0,0,0) 70%),
+          radial-gradient(220px 170px at 45% 70%, rgba(120,220,255,.05), rgba(0,0,0,0) 75%),
+          radial-gradient(240px 190px at 65% 70%, rgba(255,200,180,.02), rgba(0,0,0,0) 78%);
+        filter: blur(36px) saturate(1.2);
+      }
+      40% { 
+        opacity:0.6;
+        transform: translateX(6%) translateY(-10%) scale(1.3);
+        background:
+          radial-gradient(150px 120px at 42% 52%, rgba(120,210,255,.6), rgba(0,0,0,0) 55%),
+          radial-gradient(180px 140px at 57% 48%, rgba(255,120,220,.5), rgba(0,0,0,0) 62%),
+          radial-gradient(190px 150px at 48% 72%, rgba(120,220,255,.4), rgba(0,0,0,0) 68%),
+          radial-gradient(210px 160px at 68% 72%, rgba(255,200,180,.3), rgba(0,0,0,0) 72%);
+        filter: blur(26px) saturate(1.5);
+      }
+      75% { 
+        opacity:0.3;
+        transform: translateX(0%) translateY(0%) scale(1.1);
+        background:
+          radial-gradient(140px 110px at 40% 55%, rgba(120,210,255,.4), rgba(0,0,0,0) 50%),
+          radial-gradient(170px 130px at 55% 45%, rgba(255,120,220,.3), rgba(0,0,0,0) 60%),
+          radial-gradient(180px 140px at 45% 70%, rgba(120,220,255,.2), rgba(0,0,0,0) 65%),
+          radial-gradient(200px 150px at 65% 70%, rgba(255,200,180,.15), rgba(0,0,0,0) 70%);
+        filter: blur(18px) saturate(1.4);
+      }
+      100%{ 
+        opacity:0.8;
+        transform: translateX(-2%) translateY(1%) scale(1);
+        background:
+          radial-gradient(140px 110px at 40% 55%, rgba(120,210,255,.6), rgba(0,0,0,0) 50%),
+          radial-gradient(170px 130px at 55% 45%, rgba(255,120,220,.5), rgba(0,0,0,0) 60%),
+          radial-gradient(180px 140px at 45% 70%, rgba(120,220,255,.4), rgba(0,0,0,0) 65%),
+          radial-gradient(200px 150px at 65% 70%, rgba(255,200,180,.3), rgba(0,0,0,0) 70%);
+        filter: blur(20px) saturate(1.5);
+      }
+    }
+
+    /* Responsive */
+    @media(max-width:980px){
+      .appLogo{ width: 300px; height: 120px; justify-content: center; }
+    }
+
+    /* ===== Language Switch ===== */
+    .langBox{
+      display:flex;
+      align-items:center;
+      padding:6px;
+      border-radius:999px;
+      background: rgba(255,255,255,.14);
+      border:1px solid var(--line);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      box-shadow: var(--shadow);
+      user-select:none;
+      flex: 0 0 auto;
+      min-width: 220px;
+      margin-top: 6px;
+    }
+
+    #langLabel{
+      position:absolute;
+      width:1px;height:1px;
+      overflow:hidden;
+      clip: rect(0 0 0 0);
+      white-space:nowrap;
+    }
+
+    #langSelect{
+      position:absolute;
+      width:1px;height:1px;
+      opacity:0;
+      pointer-events:none;
+      left:-9999px;
+      top:-9999px;
+    }
+
+    .langSwitch{
+      position:relative;
+      width:100%;
+      height:38px;
+      border-radius:999px;
+      background: linear-gradient(180deg, rgba(255,255,255,.18), rgba(255,255,255,.10));
+      border:1px solid rgba(255,255,255,.18);
+      box-shadow: 0 18px 50px rgba(0,0,0,.28), inset 0 0 0 1px rgba(255,255,255,.10);
+      overflow:hidden;
+      display:flex;
+      align-items:center;
+      padding:3px;
+      cursor:pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .langSwitch.is-disabled{
+      opacity:.72;
+      cursor:not-allowed;
+      pointer-events:none;
+    }
+
+    .langKnob{
+      position:absolute;
+      top:3px;
+      left:3px;
+      width:calc(50% - 3px);
+      height:calc(100% - 6px);
+      border-radius:999px;
+      background:
+        radial-gradient(120px 60px at 30% 30%, rgba(255,255,255,.28), rgba(255,255,255,.14)),
+        linear-gradient(180deg, rgba(255,255,255,.20), rgba(255,255,255,.10));
+      border:1px solid rgba(255,255,255,.18);
+      box-shadow: 0 10px 26px rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.22);
+      transform: translateX(0%);
+      transition: transform .28s cubic-bezier(.2,.9,.2,1);
+      will-change: transform;
+    }
+
+    .langSwitch.is-en .langKnob{ transform: translateX(100%); }
+
+    .langOption{
+      z-index:2;
+      width:50%;
+      height:100%;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      border:0;
+      background:none;
+      color: rgba(238,243,255,.82);
+      font-weight:900;
+      font-size:14px;
+      cursor:pointer;
+      padding:0;
+      transition: color 220ms ease, opacity 220ms ease;
+    }
+
+    .langSwitch.is-es .langOption[data-lang="es"]{ color:#fff; }
+    .langSwitch.is-en .langOption[data-lang="en"]{ color:#fff; }
+    .langSwitch.is-es .langOption[data-lang="en"]{ opacity:.78; }
+    .langSwitch.is-en .langOption[data-lang="es"]{ opacity:.78; }
+
+    /* ===== Layout ===== */
+    .grid{
+      display:grid;
+      grid-template-columns: 1.35fr 1fr;
+      gap:20px;
+    }
+
+    .card{
+      background: rgba(255,255,255,.12);
+      border:1px solid var(--line);
+      border-radius: var(--r);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      box-shadow: var(--shadow);
+    }
+
+    .left, .right{ padding:20px; }
+
+    .sectionTitle{
+      font-size:14px;
+      color:var(--muted);
+      margin: 14px 0 10px;
+      transition: margin-top 260ms cubic-bezier(.2,.9,.2,1);
+    }
+
+    .card.dropdown-open .sectionTitle {
+      margin-top: 0 !important;
+    }
+
+    /* Improved vertical spacing: breathing room between actions and output */
+    #outputLabel{
+      margin-top: 20px;
+    }
+
+    /* ===== Form ===== */
+    .row{
+  display:flex;
+  gap:24px;
+  align-items:flex-start;
+  justify-content:space-between; /* personaje izq, categoría der */
+  flex-wrap:wrap;
+  width:100%;
+}
+
+    .row > div{
+  width: var(--fieldW);
+  display:flex;
+  flex-direction:column;
+  align-items:stretch;
+  gap:6px;
+}
+
+    label{
+  display:block;
+  width:100%;
+  text-align:left;
+  font-size:13px;
+  color:var(--muted);
+  margin:0;
+}
+
+    input{
+  width:100%;
+  height: var(--fieldH);
+  padding: 0 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(100, 200, 255, 0.35);
+  background:
+    linear-gradient(180deg, rgba(12,18,34,.30), rgba(10,16,30,.21)),
+    var(--trailBgImg);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  color: rgba(255, 255, 255, 0.95);
+  font-size:14px;
+  outline:none;
+  font-weight: 600;
+  transition: border-color 180ms ease, filter 180ms ease;
+}
+
+    /* State clarity: visual feedback when input is empty */
+    input:placeholder-shown{
+      filter: brightness(0.92);
+    }
+
+    input:not(:placeholder-shown){
+      border-color: rgba(100, 200, 255, 0.55);
+      filter: brightness(1);
+    }
+
+    input::placeholder{ 
+      color: rgba(255,255,255,0.6);
+      font-weight: 500;
+    }
+
+    .ddWrap{ 
+      position: relative; 
+      width: auto;
+      display: inline-block;
+    }
+
+    .ddArrowLeft, .ddArrowRight {
+      border: none;
+      background: transparent;
+      color: #ffffff;
+      cursor: pointer;
+      font-size: 18px;
+      padding: 4px 3px;
+      transition: all 180ms ease;
+      user-select: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      z-index: 50;
+      position: relative;
+    }
+
+    .ddArrowLeft:hover, .ddArrowRight:hover {
+      color: #ffffff;
+      transform: scale(1.3);
+    }
+
+    .ddArrowLeft:active, .ddArrowRight:active {
+      transform: scale(0.9);
+    }
+
+    #categorySelect{
+      position:absolute;
+      width:1px;height:1px;
+      opacity:0;
+      pointer-events:none;
+      left:-9999px;
+      top:-9999px;
+    }
+
+    .ddBtn{
+  z-index: 1;
+      width: 180px;
+      padding: 8px 12px;
+      border-radius: 10px;
+      border: 1px solid rgba(100, 200, 255, 0.3);
+      background: rgba(255,255,255,.12);
+      color: rgba(0,0,0,0.8);
+      font-size: 13px;
+      outline: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0;
+      position: relative;
+      overflow: visible;
+      height: auto;
+      transition: all 180ms cubic-bezier(0.34, 1.56, 0.64, 1);
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .ddBtn:hover:not(.active){
+      transform: scale(1.06);
+      background: rgba(255,255,255,.18);
+      border-color: rgba(100, 200, 255, 0.5);
+    }
+
+    .ddBtn:active:not(.active){
+      transform: scale(0.97);
+    }
+
+    .ddBtn:disabled{ cursor:not-allowed; opacity:.85; }
+
+    .ddBtn .ddValue{
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: inherit;
+      transition: opacity 120ms ease;
+    }
+
+    .ddBtn.active .ddValue {
+      opacity: 0;
+      pointer-events: none;
+      width: 0;
+    }
+
+    /* ===== NEW ZOOM + GLOW ANIMATION ===== */
+    .ddBtn.active {
+      animation: categoryZoomIn 280ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+      z-index: 100;
+      background: rgba(100, 200, 255, 0.2);
+      border-color: rgba(100, 200, 255, 0.8);
+    }
+
+    @keyframes categoryZoomIn {
+      from {
+        transform: scale(1);
+      }
+      to {
+        transform: scale(1.12);
+      }
+    }
+
+    .ddDrawer{
+  position:absolute;
+  inset:0;
+  opacity:0;
+  pointer-events:none;
+  transition: opacity 120ms ease;
+  background: transparent;
+  z-index: 2;
+}
+
+    .ddBtn.active ~ .ddDrawer {
+      max-width: 500px;
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .ddViewport {
+      position: relative;
+      width: 340px;
+      height: 52px;
+      overflow: hidden;
+      perspective: 1200px;
+      cursor: grab;
+      scroll-behavior: smooth;
+      scrollbar-width: none;
+      border-radius: 10px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 8px;
+    }
+
+    .ddViewport::-webkit-scrollbar {
+      display: none;
+    }
+
+    .ddViewport::before, .ddViewport::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 0px;
+      pointer-events: none;
+      z-index: 5;
+    }
+
+    .ddViewport::before{
+      left: 0;
+      background: transparent;
+    }
+
+    .ddViewport::after{
+      right: 0;
+      background: transparent;
+    }
+
+    .ddRail{
+      position:relative;
+      width: 280px;
+      height: 52px;
+      will-change: transform;
+      z-index: 2;
+      perspective-origin: center center;
+      transform-style: preserve-3d;
+      padding: 0;
+      transition: none;
+      flex: 1;
+    }
+
+    .ddItem{
+      width: 280px;
+      height: 52px;
+      margin: 0;
+      border-radius: 0;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding: 0 14px;
+      border: none;
+      background: transparent;
+      cursor:pointer;
+      user-select:none;
+      transform-origin: center center;
+      transform-style: preserve-3d;
+      transition: all 120ms cubic-bezier(.4,.8,.2,1);
+      font-size: 13px;
+      /* Defaults */
+      --scale: 0.55;
+      --blur: 2.0px;
+      --opacity: 0.3;
+      opacity: var(--opacity);
+      filter: blur(var(--blur));
+      transform: scale(var(--scale));
+      color: rgba(238,243,255,0.9);
+      position: absolute;
+      top: 0;
+      left: 0;
+      pointer-events: auto;
+      white-space: nowrap;
+    }
+
+    .ddItem.is-focus{
+      --scale: 1.0;
+      --blur: 0px;
+      --opacity: 1;
+      font-size: 14px;
+      color: rgba(255,255,255,1);
+      background: transparent;
+      border-color: transparent;
+      box-shadow: none;
+      font-weight: 700;
+      text-shadow: 0 0 8px rgba(100,200,255,.6);
+      position: relative;
+    }
+
+    .ddItem.is-distance-1{
+      --scale: 0.80;
+      --blur: 1.8px;
+      --opacity: 0.5;
+    }
+
+    .ddItem.is-distance-2{
+      --scale: 0.70;
+      --blur: 2.8px;
+      --opacity: 0.25;
+    }
+
+    .ddItem.is-distance-3{
+      --scale: 0.60;
+      --blur: 3.8px;
+      --opacity: 0.1;
+    }
+
+    /* ===== Actions ===== */
+    .actions{
+      display:flex;
+      align-items:center;
+      gap:12px;
+      margin:14px 0 14px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .card.dropdown-open .actions {
+      margin-top: 14px;
+    }
+
+    .btn{
+      position: relative;
+      border:none;
+      border-radius:16px;
+      padding:12px 18px;
+      font-weight:900;
+      font-size:14px;
+      cursor:pointer;
+      color:#ffffff;
+      background-image: url("assets/buttons/aroma-core.png");
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      box-shadow: 0 18px 40px rgba(170, 140, 255, .55), inset 0 0 0 1px rgba(255,255,255,.25);
+      transition: transform .18s ease, box-shadow .18s ease, filter .18s ease;
+      /* Subtle visual cue: slightly muted when character input is empty */
+      filter: brightness(0.95);
+    }
+
+    /* Ready state: full brightness when character is entered */
+    #characterInput:not(:placeholder-shown) ~ .actions .btn{
+      filter: brightness(1);
+    }
+
+    .btn:hover{
+      transform: translateY(-1px);
+      filter: brightness(1.10) saturate(1.12);
+      box-shadow: 0 22px 55px rgba(190, 160, 255, .75), inset 0 0 0 1px rgba(255,255,255,.35);
+    }
+
+    .btn:disabled{
+      filter: grayscale(.25) brightness(.85);
+      box-shadow: 0 10px 22px rgba(0,0,0,.35), inset 0 0 0 1px rgba(255,255,255,.15);
+      cursor:not-allowed;
+      opacity:.9;
+    }
+
+    .btn.secondary{
+  color: rgba(245,250,255,.98);
+  border: 1px solid rgba(140,180,255,.30);
+  font-weight: 900;
+
+  background:
+    linear-gradient(180deg, rgba(12,18,34,.45), rgba(10,16,30,.34)),
+    var(--trailBgImg);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+
+  box-shadow: 0 14px 34px rgba(90,140,255,.26), inset 0 1px 0 rgba(255,255,255,.18);
+  transition: transform .18s ease, filter .18s ease, box-shadow .18s ease;
+}
+
+    .btn.secondary:hover{
+      transform: translateY(-1px);
+      filter: brightness(1.06);
+      box-shadow: 0 18px 44px rgba(110,160,255,.36), inset 0 1px 0 rgba(255,255,255,.22);
+    }
+
+    .btn.secondary:disabled{
+      opacity:.6;
+      transform:none;
+      filter:none;
+      box-shadow:none;
+    }
+
+    #statusText{
+      margin-left:auto;
+      font-size:13px;
+      color:var(--muted);
+      min-height:18px;
+    }
+
+    #errorBox{
+      display:none;
+      margin-top:10px;
+      padding:10px 12px;
+      border-radius:12px;
+      background: rgba(255,80,80,.25);
+      border:1px solid rgba(255,120,120,.6);
+      color:#fff;
+    }
+
+    #errorBox.visible{ display:block; }
+
+    .outputBox{
+      min-height:210px;
+      padding:16px;
+      border-radius:16px;
+      border:1px solid var(--line);
+      background: rgba(255,255,255,.10);
+      line-height:1.6;
+      white-space:pre-wrap;
+      color: var(--text);
+    }
+
+    /* Right */
+    .visualRow{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:16px;
+      padding:16px;
+      border-radius:18px;
+      background: rgba(255,255,255,.10);
+      border:1px solid var(--line);
+      align-items: flex-start;
+    }
+
+    .imgFrame{
+      border-radius:16px;
+      overflow:hidden;
+      background: rgba(255,255,255,.15) url("assets/bg/placeholder.png");
+      background-size: cover;
+      background-position: center;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      width: 100%;
+      height: 250px;
+      position: relative;
+    }
+
+    #characterImg{
+      width:100%;
+      height:100%;
+      object-fit:cover;
+      object-position: center;
+      display:none;
+      position: relative;
+      z-index: 5;
+    }
+
+    .charSheetBlock{
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 14px;
+      background: rgba(255,255,255,.08);
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,.15);
+    }
+
+    .sheetTitle{
+      font-size: 14px;
+      font-weight: 700;
+      color: rgba(255,255,255,1);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+      border-bottom: 1px solid rgba(255,255,255,.2);
+      padding-bottom: 8px;
+    }
+
+    .sheetRow{
+      display: grid;
+      grid-template-columns: 120px 1fr;
+      gap: 8px;
+      align-items: flex-start;
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .sheetLabel{
+      color: rgba(255,255,255,.7);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    .sheetValue{
+      color: rgba(255,255,255,.95);
+      font-weight: 500;
+      word-break: break-word;
+    }
+
+    .charFact{
+      font-size: 13px;
+      line-height: 1.4;
+      color: rgba(255,255,255,.9);
+    }
+
+    .charFact strong{
+      color: rgba(255,255,255,1);
+      font-weight: 700;
+    }
+
+    #characterImgPh{
+      display:none !important;
+    }
+
+    #visualCharText{
+      display:flex;
+      align-items:center;
+      font-size:26px;
+      font-weight:900;
+      text-shadow: 0 12px 26px rgba(0,0,0,.35);
+      color: var(--text);
+    }
+
+    /* Notes */
+    .notesBlock{
+      padding:16px;
+      border-radius:18px;
+      border:1px solid var(--line);
+      background: rgba(255,255,255,.10);
+    }
+
+    .notesList{
+      display:flex;
+      flex-wrap:wrap;
+      gap:10px;
+    }
+
+    .noteItem{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      padding:10px 14px;
+      border-radius:999px;
+      background: var(--chipBg);
+      border:1px solid var(--chipLine);
+    }
+
+    /* ===== Note icon (mask-based metallic) ===== */
+    .noteIcon{
+      width:18px;
+      height:18px;
+      display:none; /* JS shows when note exists */
+      flex:0 0 auto;
+      -webkit-mask-repeat: no-repeat;
+      -webkit-mask-position: center;
+      -webkit-mask-size: contain;
+      mask-repeat: no-repeat;
+      mask-position: center;
+      mask-size: contain;
+      border-radius: 5px; /* suaviza edges */
+      box-shadow: 0 2px 8px rgba(0,0,0,.25), inset 0 0 0 1px rgba(255,255,255,.18);
+      filter: saturate(1.12);
+    }
+
+    /* Metallic gradients per tone */
+    .tone-generic{
+      background:
+        radial-gradient(10px 8px at 30% 30%, rgba(255,255,255,.55), rgba(255,255,255,0) 60%),
+        linear-gradient(180deg, rgba(240,245,255,.70), rgba(150,165,200,.55));
+    }
+
+    .tone-smoke{
+      background:
+        radial-gradient(10px 8px at 30% 30%, rgba(255,255,255,.35), rgba(255,255,255,0) 60%),
+        linear-gradient(180deg, rgba(210,218,232,.60), rgba(110,120,145,.55));
+    }
+
+    .tone-leaf{
+      background:
+        radial-gradient(10px 8px at 30% 30%, rgba(255,255,255,.42), rgba(255,255,255,0) 60%),
+        linear-gradient(180deg, rgba(170,255,200,.70), rgba(60,150,100,.60));
+    }
+
+    .tone-wood{
+      background:
+        radial-gradient(10px 8px at 30% 30%, rgba(255,255,255,.40), rgba(255,255,255,0) 60%),
+        linear-gradient(180deg, rgba(255,220,160,.70), rgba(160,110,60,.62));
+    }
+
+    .tone-spark{
+      background:
+        radial-gradient(10px 8px at 30% 30%, rgba(255,255,255,.55), rgba(255,255,255,0) 60%),
+        linear-gradient(180deg, rgba(170,220,255,.72), rgba(70,120,255,.62));
+    }
+
+    .tone-earth{
+      background:
+        radial-gradient(10px 8px at 30% 30%, rgba(255,255,255,.40), rgba(255,255,255,0) 60%),
+        linear-gradient(180deg, rgba(230,210,170,.70), rgba(130,90,55,.62));
+    }
+
+    .tone-water{
+      background:
+        radial-gradient(10px 8px at 30% 30%, rgba(255,255,255,.55), rgba(255,255,255,0) 60%),
+        linear-gradient(180deg, rgba(180,245,255,.74), rgba(60,160,220,.62));
+    }
+
+    .tone-fabric{
+      background:
+        radial-gradient(10px 8px at 30% 30%, rgba(255,255,255,.55), rgba(255,255,255,0) 60%),
+        linear-gradient(180deg, rgba(240,240,255,.72), rgba(165,175,210,.60));
+    }
+
+    .tone-salt{
+      background:
+        radial-gradient(10px 8px at 30% 30%, rgba(255,255,255,.55), rgba(255,255,255,0) 60%),
+        linear-gradient(180deg, rgba(235,250,255,.76), rgba(140,180,210,.60));
+    }
+
+    .tone-citrus{
+      background:
+        radial-gradient(10px 8px at 30% 30%, rgba(255,255,255,.55), rgba(255,255,255,0) 60%),
+        linear-gradient(180deg, rgba(255,235,120,.76), rgba(255,140,40,.62));
+    }
+
+    .tone-incense{
+      background:
+        radial-gradient(10px 8px at 30% 30%, rgba(255,255,255,.45), rgba(255,255,255,0) 60%),
+        linear-gradient(180deg, rgba(225,190,255,.70), rgba(120,70,190,.62));
+    }
+
+    .tone-musk{
+      background:
+        radial-gradient(10px 8px at 30% 30%, rgba(255,255,255,.45), rgba(255,255,255,0) 60%),
+        linear-gradient(180deg, rgba(255,215,235,.72), rgba(200,100,170,.62));
+    }
+
+    .tone-leather{
+      background:
+        radial-gradient(10px 8px at 30% 30%, rgba(255,255,255,.38), rgba(255,255,255,0) 60%),
+        linear-gradient(180deg, rgba(220,190,160,.68), rgba(120,70,45,.62));
+    }
+
+    .noteText{ font-size:13px; white-space:nowrap; color: var(--text); }
+
+    /* ===== Studio Footer (Trademark) ===== */
+    .studioFooter{
+      position: fixed;
+      bottom: 18px;
+      left: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 8px;
+      padding: 0;
+      z-index: 999;
+      pointer-events: none;
+      transition: opacity 300ms ease;
+      opacity: 0.5;
+    }
+
+    /* Hidden when zoom >= 150% */
+    .studioFooter.hidden{
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .studioText{
+      font-family: 'Courier New', 'Courier', monospace;
+      font-size: 10px;
+      font-weight: 600;
+      color: rgba(255,255,255,0.85);
+      letter-spacing: 0.5px;
+      white-space: nowrap;
+      text-shadow: 0 2px 8px rgba(0,0,0,.5);
+      text-align: center;
+    }
+
+    .studioLogo{
+      width: 24px;
+      height: 24px;
+      object-fit: contain;
+      opacity: 0.45;
+      filter: drop-shadow(0 0 6px rgba(120,210,255,.4)) drop-shadow(0 0 3px rgba(255,120,220,.25));
+      transition: filter 180ms ease;
+    }
+
+    .studioFooter:hover .studioLogo{
+      filter: drop-shadow(0 0 10px rgba(120,210,255,.6)) drop-shadow(0 0 6px rgba(255,120,220,.4));
+    }
+
+    @media(max-width:980px){
+      .grid{ grid-template-columns:1fr; }
+      .visualRow{ grid-template-columns:1fr; }
+      .topbar{ 
+        flex-wrap:wrap; 
+        justify-content: center;
+      }
+      .langBox{ width:100%; min-width: 0; }
+      .appLogo{ 
+        width: 260px; 
+        height: 110px;
+        justify-content: center;
+        margin: 0 auto;
+      }
+    }
+
+    /* MOBILE ADJUSTMENTS (max-width: 640px) */
+    @media(max-width:640px){
+      body {
+        display: flex;
+        flex-direction: column;
+        min-height: 100vh;
+        padding-bottom: 100px; /* Make room for footer */
+      }
+
+      .topbar {
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 20px;
+        padding: 20px;
+        margin-bottom: 10px;
+      }
+
+      .appLogo {
+        width: 240px;
+        height: 100px;
+        margin: 0 auto;
+        justify-content: center;
+      }
+
+      .langBox {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+      }
+
+      #langLabel {
+        text-align: center;
+      }
+
+      .langSwitch {
+        width: 100%;
+        max-width: 220px;
+      }
+
+      .grid {
+        flex: 1;
+        padding: 0 16px 20px;
+      }
+
+      .card {
+        width: 100% !important;
+        max-width: 100%;
+      }
+
+      .row {
+        flex-direction: column;
+        gap: 20px;
+      }
+
+      .row > div {
+        width: 100%;
+        text-align: center;
+      }
+
+      label {
+        display: block;
+        text-align: center;
+        margin-bottom: 10px;
+      }
+
+      input, select {
+        width: 100%;
+      }
+
+      #categoryDD {
+        width: 100% !important;
+        margin: 0 auto;
+      }
+
+      .actions {
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .btn {
+        width: 100%;
+      }
+
+      .visualRow {
+        flex-direction: column;
+        gap: 20px;
+      }
+
+      .charSheetBlock {
+        width: 100%;
+      }
+
+      /* Footer positioning for mobile - absolute at bottom */
+      .studioFooter {
+        position: absolute;
+        bottom: 12px;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        width: 100%;
+        padding: 12px;
+        text-align: center;
+        background: rgba(0, 0, 0, 0.3);
+        backdrop-filter: blur(4px);
+        border-radius: 12px;
+      }
+
+      .studioText {
+        font-size: 9px;
+        white-space: normal;
+        line-height: 1.2;
+      }
+
+      .studioLogo {
+        width: 20px;
+        height: 20px;
+      }
+    }
+  
+
+/* ===== Category dropdown (in-box carousel) ===== */
+.ddWrap{
+  position:relative;
+  width:100%;
+  display:block;
+}
+
+.ddBtn{
+  width: 100%;
+  height: var(--fieldH);
+  border-radius: 14px;
+  border: 1px solid rgba(100, 200, 255, 0.25);
+  background:
+    linear-gradient(180deg, rgba(12,18,34,.40), rgba(10,16,30,.28)),
+    var(--trailBgImg);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+
+  color: rgba(245,250,255,.95);
+  font-size: 13px;
+  font-weight: 900;
+
+  outline:none;
+  cursor:pointer;
+
+  display:flex;
+  align-items:center;
+  justify-content:center;
+
+  position:relative;
+  overflow:hidden;
+  transition: transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1), filter 180ms ease;
+}
+
+.ddBtn:hover:not(.active){
+  transform: scale(1.04);
+  filter: brightness(1.06);
+}
+
+.ddBtn:active:not(.active){
+  transform: scale(0.98);
+}
+
+.ddBtn:disabled{
+  cursor:not-allowed;
+  opacity:.85;
+}
+
+.ddBtn .ddValue{
+  width:100%;
+  text-align:center;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+.ddBtn.active{
+  transform: scale(1.06);
+  border-color: rgba(120, 220, 255, 0.85);
+  animation: catGlow 0.55s ease-in-out infinite;
+}
+
+@keyframes catGlow{
+  0%, 100%{ box-shadow: 0 0 14px rgba(120,220,255,.35), 0 0 30px rgba(120,220,255,.18); }
+  50%{     box-shadow: 0 0 22px rgba(120,220,255,.60), 0 0 46px rgba(120,220,255,.28); }
+}
+
+.ddBtn.confirm{
+  animation: catConfirm 180ms cubic-bezier(.2,.9,.2,1);
+}
+@keyframes catConfirm{
+  0%{ transform: scale(1.06); }
+  50%{ transform: scale(1.12); }
+  100%{ transform: scale(1.06); }
+}
+
+.ddDrawer{
+  position:absolute;
+  inset:0;
+  opacity:0;
+  pointer-events:none;
+  transition: opacity 120ms ease;
+}
+
+.ddWrap.open .ddDrawer{
+  opacity:1;
+  pointer-events:auto;
+}
+
+.ddViewport{
+  width:100%;
+  height:100%;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding: 0 8px;
+}
+
+.ddArrowLeft, .ddArrowRight{
+  border:none;
+  background:transparent;
+  color:#ffffff;
+  cursor:pointer;
+  font-size:18px;
+  padding: 4px 6px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  user-select:none;
+  transition: transform 160ms ease;
+}
+
+.ddArrowLeft:hover, .ddArrowRight:hover{ transform: scale(1.25); }
+.ddArrowLeft:active, .ddArrowRight:active{ transform: scale(0.92); }
+
+.ddActiveValue{
+  flex:1;
+  text-align:center;
+  font-weight: 900;
+  font-size: 14px;
+  color: rgba(255,255,255,1);
+  text-shadow: 0 0 10px rgba(120,220,255,.55);
+  cursor:pointer;
+  user-select:none;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+
+
+/* =========================
+   WTS OVERRIDE v6 (Glow tight fit)
+   Goal: glow slightly bigger than category button (e.g. +2px each side),
+   without creating a long horizontal bar.
+   - Fix arrows click (z-index)
+   - Keep background visible in selection (overlay opacity)
+   - Glow limited to category button bounds
+   ========================= */
+
+#categoryDD .ddBtn{
+  overflow: visible !important; /* allow glow to extend slightly */
+}
+
+/* Glow drawn by a pseudo-element sized just around the button */
+#categoryDD .ddBtn.active::after{
+  content:"";
+  position:absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: 14px;         /* match button radius */
+  pointer-events:none;
+  z-index: 1;
+
+  /* crisp edge + soft glow - inset para que brille desde adentro */
+  box-shadow:
+    inset 0 0 0 1px rgba(120,220,255,.78),
+    inset 0 0 3px rgba(120,220,255,.32),
+    inset 0 0 6px rgba(120,220,255,.18);
+  animation: catGlowTight 0.55s ease-in-out infinite;
+}
+
+@keyframes catGlowTight{
+  0%,100%{
+    box-shadow:
+      inset 0 0 0 1px rgba(120,220,255,.70),
+      inset 0 0 3px rgba(120,220,255,.28),
+      inset 0 0 6px rgba(120,220,255,.16);
+  }
+  50%{
+    box-shadow:
+      inset 0 0 0 1px rgba(120,220,255,.92),
+      inset 0 0 5px rgba(120,220,255,.45),
+      inset 0 0 8px rgba(120,220,255,.22);
+  }
+}
+
+#categoryDD{
+  width: var(--fieldW);
+}
+
+#categoryDD .ddBtn{
+  width: 100% !important;
+  height: var(--fieldH) !important;
+  padding: 0 12px !important;
+  border-radius: 14px !important;
+ border: 1px solid rgba(100, 200, 255, 0.25) !important;
+
+background:
+  var(--trailBgImg) !important;
+
+color: rgba(245,250,255,.96) !important;
+
+
+  position: relative !important;
+  overflow: visible !important;
+  z-index: 2 !important;
+  transition: opacity 0.3s ease, filter 0.3s ease;
+}
+
+#categoryDD .ddBtn:disabled {
+  opacity: 0.5;
+  filter: grayscale(60%);
+  cursor: not-allowed !important;
+}
+
+#categoryDD .ddBtn .ddValue{
+  width:100%;
+  text-align:center;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+#categoryDD .ddDrawer{
+  position:absolute;
+  inset:0;
+  border-radius: 14px;
+  opacity:0;
+  pointer-events:none;
+  z-index: 3; /* must be ABOVE ddBtn so arrows can be clicked */
+  display:flex;
+  align-items:center;
+
+  /* overlay to show "selection mode" but keep bg visible */
+  background: rgba(10,16,30,0.28);
+  backdrop-filter: blur(2px);
+}
+
+#categoryDD.open .ddDrawer{
+  opacity:1;
+  pointer-events:auto;
+}
+
+#categoryDD .ddViewport{
+  width:100%;
+  height:100%;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding: 0 8px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+
+#categoryDD .ddActiveValue{
+  flex:1;
+  height:100%;
+  border:none;
+  background:transparent;
+  color:#fff;
+  font-weight:800;
+  font-size:15px;
+  letter-spacing:0.2px;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding: 0 8px;
+  pointer-events:auto;
+  user-select:none;
+  -webkit-tap-highlight-color: transparent;
+}
+#categoryDD .ddActiveValue:focus{
+  outline: none;
+  border-radius:999px;
+}
+
+
+#categoryDD .ddArrowLeft,
+#categoryDD .ddArrowRight{
+  border:none;
+  background:transparent;
+  color:#fff;
+  cursor:pointer;
+  font-size:18px;
+  padding: 6px 10px;
+  min-width: 38px;
+  min-height: 38px;
+  user-select:none;
+  pointer-events:auto;
+  line-height:1;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+#categoryDD .ddActiveValue{
+  flex:1;
+  text-align:center;
+  font-weight:900;
+  font-size:14px;
+  color:#fff;
+  cursor:pointer;
+  user-select:none;
+  padding: 0 6px;
+}
+
+/* Glow strictly around button bounds */
+#categoryDD .ddBtn.active{
+  border-color: rgba(120, 220, 255, 0.85) !important;
+  background:
+    linear-gradient(180deg, rgba(12,18,34,.40), rgba(10,16,30,.28)),
+    var(--trailBgImg) !important;
+}
+
+</style>
+
+<style>
+  /* Character image: always fill frame, no gaps, crop watermark */
+  .imgFrame{ overflow:hidden; }
+  #characterImg{
+    width:100%;
+    height:100%;
+    object-fit:cover;
+    object-position:center 18%;
+    transform: scale(1.10);
+    display:block;
+  }
+  .curiosityBox{
+    margin-top: 10px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    background: rgba(10,10,20,.25);
+    border: 1px solid rgba(255,255,255,.12);
+    color: rgba(255,255,255,.86);
+    line-height: 1.35;
+    min-height: 42px;
+  }
+</style>
+</head>
+
+<body>
+  <div class="topbar">
+    <!-- LOGO replaces title -->
+    <div class="appLogo">
+      <img id="appLogoImg" src="assets/brand/logo-es.png" alt="¿A qué huele?" />
+    </div>
+
+    <div class="langBox">
+      <span id="langLabel">Language</span>
+
+      <div id="langSwitch" class="langSwitch is-es" role="switch" aria-checked="false" tabindex="0" title="Toggle language">
+        <div class="langKnob"></div>
+        <button type="button" class="langOption" data-lang="es" aria-label="Español">Español</button>
+        <button type="button" class="langOption" data-lang="en" aria-label="English">English</button>
+      </div>
+
+      <select id="langSelect">
+        <option value="en" selected>English</option>
+        <option value="es">Español</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="grid">
+    <!-- LEFT -->
+    <div class="card left">
+      <div class="row">
+        <div>
+          <label id="characterLabel" for="characterInput">Character</label>
+          <input id="characterInput" placeholder="e.g., Naruto" autocomplete="off"/>
+        </div>
+
+        <div>
+          <label id="categoryLabel" for="categorySelect">Category</label>
+
+          <div class="ddWrap" id="categoryDD">
+  <button type="button" class="ddBtn" id="categoryBtn" aria-haspopup="listbox" aria-expanded="false">
+    <span class="ddValue" id="categoryValue">Choose one</span>
+  </button>
+
+  <div class="ddDrawer" id="categoryDrawer">
+    <div class="ddViewport" id="ddViewport">
+      <button type="button" class="ddArrowLeft" id="categoryArrowLeft" aria-label="Previous category">◀</button>
+      <button type="button" class="ddActiveValue" id="categoryValueActive" aria-label="Confirm category">Choose one</button>
+      <button type="button" class="ddArrowRight" id="categoryArrowRight" aria-label="Next category">▶</button>
+    </div>
+  </div>
+</div>
+
+          <select id="categorySelect"></select>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button id="smellBtn" class="btn">Identify scent</button>
+        <button id="clearBtn" class="btn secondary">New trail</button>
+        <div id="statusText"></div>
+      </div>
+
+      <div id="errorBox"></div>
+
+      <div class="sectionTitle" id="outputLabel">Scent profile…</div>
+      <div id="outputBox" class="outputBox"></div>
+    </div>
+
+    <!-- RIGHT -->
+    <div class="card right">
+      <div class="sectionTitle" id="visualTitle1">Character Visual and Sheet</div>
+
+      <div class="visualRow">
+        <div class="imgFrame">
+          <img id="characterImg" alt=""/>
+        </div>
+        <div class="charSheetBlock" id="charSheetBlock">
+          <div class="sheetRow">
+            <span class="sheetLabel" id="sheetLabelName">Name:</span>
+            <span class="sheetValue" id="charSheetName">—</span>
+          </div>
+          <div class="sheetRow">
+            <span class="sheetLabel" id="sheetLabelUniverse">Universe:</span>
+            <span class="sheetValue" id="charSheetUniverse">—</span>
+          </div>
+          <div class="sheetRow">
+            <span class="sheetLabel" id="sheetLabelCategory">Category:</span>
+            <span class="sheetValue" id="charSheetCategory">—</span>
+          </div>
+          <div class="sheetRow">
+            <span class="sheetLabel" id="sheetLabelAromaType">Aroma Type:</span>
+            <span class="sheetValue" id="charSheetAromaType">—</span>
+          </div>
+          <div class="sheetRow">
+            <span class="sheetLabel" id="sheetLabelSensation">Main Sensation:</span>
+            <span class="sheetValue" id="charSheetSensation">—</span>
+          </div>
+          <div class="sheetRow">
+            <span class="sheetLabel" id="sheetLabelStyle">Olfactory Style:</span>
+            <span class="sheetValue" id="charSheetStyle">—</span>
+          </div>
+          <div class="sheetRow">
+            <span class="sheetLabel" id="sheetLabelImpression">Last Impression:</span>
+            <span class="sheetValue" id="charSheetImpression">—</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="sectionTitle" id="curiosityTitle">Aroma curiosity</div>
+      <div id="curiosityBox" class="curiosityBox">—</div>
+
+      <div class="sectionTitle" id="visualTitle2">Aroma profile</div>
+
+      <div class="notesBlock">
+        <div class="notesList">
+          <!-- icon is a span (mask-based), not <img> -->
+          <div class="noteItem"><span id="compImg1" class="noteIcon tone-generic"></span><span id="compName1" class="noteText">—</span></div>
+          <div class="noteItem"><span id="compImg2" class="noteIcon tone-generic"></span><span id="compName2" class="noteText">—</span></div>
+          <div class="noteItem"><span id="compImg3" class="noteIcon tone-generic"></span><span id="compName3" class="noteText">—</span></div>
+          <div class="noteItem"><span id="compImg4" class="noteIcon tone-generic"></span><span id="compName4" class="noteText">—</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Trademark Footer -->
+  <div class="studioFooter">
+    <span class="studioText">ReyMono Studio │ Creative Lab</span>
+    <img class="studioLogo" src="assets/brand/businesslogo.png" alt="ReyMono Studio Logo" />
+  </div>
+
+  <script>
+    // Force-clean previous service workers and caches to avoid stale assets in this session
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.getRegistrations().then((regs) => regs.forEach((r) => r.unregister()));
+    }
+    if (window.caches) {
+      caches.keys().then((keys) => keys.forEach((k) => caches.delete(k)));
+    }
+  </script>
+  <script src="gate.js?v=1706300002"></script>
+  <script src="app.js?v=20240126" defer></script>
+  <script>
+    const ENABLE_SW = false; // disable SW to avoid stale assets during debug
+    if (ENABLE_SW && "serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("/sw.js?v=20240126")
+          .then(() => console.log("Service Worker registrado"))
+          .catch(err => console.error("SW error", err));
+      });
+    }
+  </script>
+</body>
+</html>

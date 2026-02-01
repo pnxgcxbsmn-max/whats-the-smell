@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 64 64" role="img" aria-label="Ylang-Ylang">
+  <defs>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="2.2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7cf" stop-opacity="0.95"/>
+      <stop offset="1" stop-color="#b7ffcf" stop-opacity="0.75"/>
+    </linearGradient>
+  </defs>
+  <rect x="6" y="6" width="52" height="52" rx="14" fill="#07080a" stroke="url(#g)" stroke-opacity="0.28"/>
+  <g filter="url(#glow)" color="#8fe8ff" opacity="0.98">
+    <circle cx="32" cy="34" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M32 18 C28 22 28 26 32 30 C36 26 36 22 32 18 Z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M18 34 C22 30 26 30 30 34 C26 38 22 38 18 34 Z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M34 34 C38 30 42 30 46 34 C42 38 38 38 34 34 Z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M32 38 C28 42 28 46 32 50 C36 46 36 42 32 38 Z" fill="none" stroke="currentColor" stroke-width="2"/>
+  </g>
+  <text x="32" y="60" font-size="8" text-anchor="middle" fill="#9fb3c8" opacity="0.85">#068</text>
+</svg>
