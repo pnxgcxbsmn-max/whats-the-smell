@@ -8,7 +8,6 @@ import fs from "fs";
 import crypto from "crypto";
 import { LRUCache } from "lru-cache";
 import { GoogleGenAI } from "@google/genai";
-import sharp from "sharp";
 
 const app = express();
 const PORT = process.env.PORT || 5051;
