@@ -56,6 +56,7 @@
 
     characterImg: document.getElementById("characterImg"),
     visualCharText: document.getElementById("visualCharText"),
+    loadingSpinner: document.getElementById("loadingSpinner"),
 
     compImg: [
       document.getElementById("compImg1"),
@@ -588,6 +589,23 @@ async function tryLoadCachedGeneratedImage(charName) {
     applyLocks();
   }
 
+  function showLoadingSpinner() {
+    if (el.loadingSpinner) {
+      el.loadingSpinner.classList.add("active");
+      // Nota: la clase "spinning" ya se agrega en onGenerate() para empezar la animación inmediatamente
+    }
+  }
+
+  function hideLoadingSpinner() {
+    if (el.loadingSpinner) {
+      el.loadingSpinner.classList.remove("active");
+      const imgFrame = document.querySelector('.imgFrame');
+      if (imgFrame) {
+        imgFrame.classList.remove("spinning");
+      }
+    }
+  }
+
   // ===== Dropdown =====
   function fillCategorySelectHidden() {
     const prev = state.selectedCategory || "any";
@@ -1100,6 +1118,16 @@ function updateCarouselFocus() {
           delete entry.target.dataset.lazyImageUrl;
           imageObserver.unobserve(entry.target);
           console.log("Lazy loaded image:", url.slice(0, 50));
+          
+          // Hide loading spinner when image successfully loads
+          entry.target.onload = () => {
+            hideLoadingSpinner();
+            entry.target.onload = null; // Clean up listener
+          };
+          entry.target.onerror = () => {
+            hideLoadingSpinner();
+            entry.target.onerror = null; // Clean up listener
+          };
         }
       });
     }, {
@@ -1117,6 +1145,7 @@ function updateCarouselFocus() {
     }
 
     try {
+      showLoadingSpinner();
       const univ = String(universe || "").trim();
       let url = `${API}/api/ai-image?name=${encodeURIComponent(name)}&category=${encodeURIComponent(categoryId || "any")}&style=anime`;
       if (univ) {
@@ -1132,6 +1161,7 @@ function updateCarouselFocus() {
       
       if (!r.ok || !imgUrl) {
         console.error("Image generation failed:", data?.details || data?.error || "unknown error");
+        hideLoadingSpinner();
         throw new Error(data?.details || data?.error || "image generation failed");
       }
 
@@ -1145,12 +1175,14 @@ function updateCarouselFocus() {
       console.log("Image queued for lazy loading");
     } catch (err) {
       console.error("setCharacterImage error:", err.message);
+      hideLoadingSpinner();
 
       // Fallback: if backend failed, try serving a previously generated cached image from disk
       try {
         const loaded = await tryLoadCachedGeneratedImage(name);
         if (loaded) {
           console.log("Fallback cached image loaded from /generated");
+          hideLoadingSpinner();
           return;
         }
       } catch (e) {
@@ -1264,6 +1296,13 @@ function updateCarouselFocus() {
   async function onGenerate() {
     if (state.hasResult) return;
     clearError();
+
+    // INICIAR ANIMACIÓN DE FONDO INMEDIATAMENTE
+    const imgFrame = document.querySelector('.imgFrame');
+    if (imgFrame) {
+      imgFrame.classList.add("spinning");
+    }
+    showLoadingSpinner();
 
     // ===== RATE LIMITING CHECK (Beta Early Access) =====
     if (typeof hasReachedGenerationLimit === "function" && hasReachedGenerationLimit()) {
@@ -1418,6 +1457,12 @@ function updateCarouselFocus() {
     // Reset imágenes
     if (el.visualImg1) el.visualImg1.src = "";
     if (el.visualImg2) el.visualImg2.src = "";
+    
+    // Hide loading spinner
+    hideLoadingSpinner();
+    el.characterImg.style.display = "none";
+    el.characterImg.removeAttribute("src");
+    el.characterImg.removeAttribute("data-lazy-image-url");
     
     // Reset listas de aroma
     const noteElements = document.querySelectorAll("[id^='compImg']");
