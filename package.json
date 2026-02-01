@@ -2,6 +2,7 @@
     "name": "whats-the-smell-root",
     "private": true,
     "scripts": {
+      "start": "cd api && npm start",
       "frontend": "cd Frontend && npx serve -l 3000",
       "backend": "cd api && npm start"
     }
