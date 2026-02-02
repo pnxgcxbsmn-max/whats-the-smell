@@ -68,7 +68,7 @@
     
   --fieldW: 260px;
   --fieldH: 44px;
-  --trailBgImg: url("assets/buttons/new-trail-bg.png");}
+  --trailBgImg: url("/assets/buttons/new-trail-bg.png");}
 
     *{ box-sizing:border-box; }
 
@@ -786,7 +786,7 @@
       font-size:14px;
       cursor:pointer;
       color:#ffffff;
-      background-image: url("assets/buttons/aroma-core.png");
+      background-image: url("/assets/buttons/aroma-core.png");
       background-size: cover;
       background-position: center;
       background-repeat: no-repeat;
@@ -794,6 +794,7 @@
       transition: transform .18s ease, box-shadow .18s ease, filter .18s ease;
       /* Subtle visual cue: slightly muted when character input is empty */
       filter: brightness(0.95);
+      text-transform: none;
     }
 
     /* Ready state: full brightness when character is entered */
