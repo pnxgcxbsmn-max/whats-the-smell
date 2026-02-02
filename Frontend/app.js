@@ -608,6 +608,7 @@ async function tryLoadCachedGeneratedImage(charName) {
 
   // ===== Dropdown =====
   function fillCategorySelectHidden() {
+    console.log("[fillCategorySelectHidden] Starting, CATEGORIES.length =", CATEGORIES.length);
     const prev = state.selectedCategory || "any";
     el.categorySelect.innerHTML = "";
     for (const c of CATEGORIES) {
@@ -615,8 +616,10 @@ async function tryLoadCachedGeneratedImage(charName) {
       opt.value = c.id;
       opt.textContent = categoryLabelFor(c.id);
       el.categorySelect.appendChild(opt);
+      console.log("[fillCategorySelectHidden] Added option:", c.id, categoryLabelFor(c.id));
     }
     el.categorySelect.value = CATEGORIES.some((x) => x.id === prev) ? prev : "any";
+    console.log("[fillCategorySelectHidden] Done. Total options:", el.categorySelect.options.length);
   }
 
   function setCategoryValue(id) {
@@ -632,6 +635,7 @@ async function tryLoadCachedGeneratedImage(charName) {
   }
 
   function ddOpen() {
+    console.log("[ddOpen] Called, state.ddOpen =", state.ddOpen, "state.busy =", state.busy, "state.hasResult =", state.hasResult);
     if (state.busy || state.hasResult) return;
     if (state.ddOpen) return;
 
@@ -644,6 +648,7 @@ async function tryLoadCachedGeneratedImage(charName) {
     const idx = CATEGORIES.findIndex((x) => x.id === state.selectedCategory);
     state.focusIndex = idx >= 0 ? idx : 0;
     if (el.categoryValueActive) el.categoryValueActive.textContent = categoryLabelFor(state.selectedCategory);
+    console.log("[ddOpen] Opened, focusIndex =", state.focusIndex);
   }
 
   function ddClose() {
@@ -686,11 +691,15 @@ function updateCarouselFocus() {
 }
 
   function bindCategoryDropdown() {
+    console.log("[bindCategoryDropdown] Starting bind");
     // Generate carousel items
     renderCategoryCarousel();
 
     // Open/close on button click
-    el.categoryBtn.addEventListener("click", () => ddToggle());
+    el.categoryBtn.addEventListener("click", () => {
+      console.log("[CLICK] categoryBtn clicked");
+      ddToggle();
+    });
 
     // Some browsers may focus-shift on mousedown; keep it from cancelling click
     el.categoryBtn.addEventListener("mousedown", (e) => { if (state.ddOpen) e.preventDefault(); });
@@ -1555,6 +1564,8 @@ function updateCarouselFocus() {
 
   // ===== Boot =====
   function boot() {
+    console.log("[BOOT] Starting boot sequence");
+    
     // Set default language to English on first load
     if (!el.langSelect.value) {
       el.langSelect.value = "en";
@@ -1566,9 +1577,13 @@ function updateCarouselFocus() {
     state.isInitialLoad = false;
 
     // Category init
+    console.log("[BOOT] Calling fillCategorySelectHidden()");
     fillCategorySelectHidden();
+    console.log("[BOOT] Category select filled, el.categorySelect.options.length =", el.categorySelect.options.length);
+    
     setCategoryValue("any");
     computeCategoryButtonWidth();
+    console.log("[BOOT] Category initialized");
 
     // Text
     applyStaticText();

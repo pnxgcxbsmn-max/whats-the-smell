@@ -369,11 +369,23 @@ function playAromaAnimation() {
  */
 function showMainSite() {
   try {
-    // Encontrar y remover el gate
+    // Remover completamente el gate
     const container = document.getElementById("accessGateContainer");
     if (container) {
-      container.remove();
+      container.style.display = "none";
+      setTimeout(() => container.remove(), 100);
     }
+
+    // Remover estilos inyectados por el gate
+    const styles = document.querySelectorAll("style");
+    styles.forEach((s) => {
+      if (s.textContent && s.textContent.includes("ACCESS GATE STYLES")) {
+        s.remove();
+      }
+    });
+
+    // Asegurar que no hay overlay
+    document.body.style.overflow = "auto";
 
     // Mostrar elementos del sitio con pequeño delay para evitar race conditions
     setTimeout(() => {
@@ -385,7 +397,6 @@ function showMainSite() {
         topbar.style.display = "flex";
         topbar.style.opacity = "0";
         topbar.classList.add("fade-in");
-        // Forzar reflow
         void topbar.offsetHeight;
         topbar.style.opacity = "1";
       }
@@ -861,6 +872,19 @@ function addAccessGateStyles() {
     }
 
     /* Transición fade-in del sitio */
+    .fade-in {
+      animation: fade-in-anim 0.8s ease-out !important;
+    }
+
+    @keyframes fade-in-anim {
+      from {
+        opacity: 0;
+      }
+      to {
+        opacity: 1;
+      }
+    }
+
     main.fade-in {
       animation: access-gate-main-fade-in 0.8s ease-out;
     }
