@@ -8,9 +8,10 @@ const GATE_VERSION = "2026-01-26-v2";
 const BETA_PASSWORD = "reymono95";
 
 // ===== ENVIRONMENT VARIABLES =====
-// Set WTS_SKIP_GATE=true in localStorage to bypass gate in development
+// Set WTS_SKIP_GATE=true in localStorage to bypass gate ONLY in development
 const SKIP_GATE_FOR_DEV = localStorage.getItem("WTS_SKIP_GATE") === "true";
 const IS_DEVELOPMENT = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+// Solo skip si AMBAS condiciones son verdaderas: development AND explícito flag
 const SHOULD_SKIP_GATE = IS_DEVELOPMENT && SKIP_GATE_FOR_DEV;
 
 // Debug: mostrar que se cargó la versión correcta
@@ -959,4 +960,12 @@ function getGenerationLimitInfo() {
     limit: GENERATION_LIMIT,
     percentage: Math.round((used / GENERATION_LIMIT) * 100),
   };
+}
+
+// ===== INITIALIZE GATE ON PAGE LOAD =====
+document.addEventListener("DOMContentLoaded", initAccessGate);
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initAccessGate);
+} else {
+  initAccessGate();
 }
