@@ -927,10 +927,67 @@
     @keyframes continuousSpin {
       0% {
         transform: scale(2.3) rotate(0deg);
+        filter: blur(0px);
+      }
+      50% {
+        filter: blur(1.5px);
       }
       100% {
         transform: scale(2.3) rotate(360deg);
+        filter: blur(0px);
       }
+    }
+
+    @keyframes starMoveLeft {
+      0% {
+        right: -50px;
+        opacity: 0;
+      }
+      10% {
+        opacity: 0.6;
+      }
+      90% {
+        opacity: 0.6;
+      }
+      100% {
+        right: 100vw;
+        opacity: 0;
+      }
+    }
+
+    @keyframes starMoveRight {
+      0% {
+        left: -50px;
+        opacity: 0;
+      }
+      10% {
+        opacity: 0.5;
+      }
+      90% {
+        opacity: 0.5;
+      }
+      100% {
+        left: 100vw;
+        opacity: 0;
+      }
+    }
+
+    .star {
+      position: fixed;
+      width: 2px;
+      height: 2px;
+      background: radial-gradient(circle, rgba(255,255,255,0.8), rgba(255,255,255,0));
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .star-left {
+      animation: starMoveLeft 8s linear infinite;
+    }
+
+    .star-right {
+      animation: starMoveRight 10s linear infinite;
     }
 
     #characterImg{
@@ -1658,6 +1715,14 @@ color: rgba(245,250,255,.96) !important;
 </head>
 
 <body>
+  <!-- Animated background stars -->
+  <div class="star star-left" style="top: 15%; right: 0;"></div>
+  <div class="star star-right" style="top: 25%; left: 0; animation-delay: 2s;"></div>
+  <div class="star star-left" style="top: 45%; right: 0; animation-delay: 4s;"></div>
+  <div class="star star-right" style="top: 65%; left: 0; animation-delay: 1s;"></div>
+  <div class="star star-left" style="top: 80%; right: 0; animation-delay: 3s;"></div>
+  <div class="star star-right" style="top: 35%; left: 0; animation-delay: 5s;"></div>
+  
   <div class="topbar">
     <!-- LOGO replaces title -->
     <div class="appLogo">
