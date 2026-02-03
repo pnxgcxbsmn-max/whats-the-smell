@@ -336,6 +336,17 @@ function showMainSite() {
       container.remove();
     }
 
+    // Remover estilos inyectados por el gate
+    const styles = document.querySelectorAll("style");
+    styles.forEach((s) => {
+      if (s.textContent && s.textContent.includes("ACCESS GATE STYLES")) {
+        s.remove();
+      }
+    });
+
+    // Asegurar que no hay overlay
+    document.body.style.overflow = "auto";
+
     // Mostrar elementos del sitio con pequeño delay para evitar race conditions
     setTimeout(() => {
       const topbar = document.querySelector(".topbar");

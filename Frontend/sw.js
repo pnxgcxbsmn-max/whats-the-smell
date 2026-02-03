@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v4-20240126";
+const CACHE_VERSION = "v5-20260203";
 const CACHE_NAME = `wts-cache-${CACHE_VERSION}`;
 const CRITICAL_ASSETS = [
   "/",

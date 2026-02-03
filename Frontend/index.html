@@ -1577,8 +1577,9 @@ color: rgba(245,250,255,.96) !important;
 
   position: relative !important;
   overflow: visible !important;
-  z-index: 2 !important;
+  z-index: 20 !important; /* always above drawer */
   transition: opacity 0.3s ease, filter 0.3s ease;
+  pointer-events: auto !important;
 }
 
 #categoryDD .ddBtn:disabled {
@@ -1593,6 +1594,8 @@ color: rgba(245,250,255,.96) !important;
   white-space:nowrap;
   overflow:hidden;
   text-overflow:ellipsis;
+  pointer-events:auto !important;
+  display:block;
 }
 
 #categoryDD .ddDrawer{
@@ -1601,18 +1604,22 @@ color: rgba(245,250,255,.96) !important;
   border-radius: 14px;
   opacity:0;
   pointer-events:none;
-  z-index: 3; /* must be ABOVE ddBtn so arrows can be clicked */
-  display:flex;
+  z-index: 1; /* below ddBtn when closed, allow button clicks */
+  display:none; /* Hidden when closed */
+  flex-direction: column;
   align-items:center;
 
   /* overlay to show "selection mode" but keep bg visible */
   background: rgba(10,16,30,0.28);
   backdrop-filter: blur(2px);
+  transition: opacity 120ms ease, pointer-events 120ms ease;
 }
 
 #categoryDD.open .ddDrawer{
+  display:flex; /* Show when open */
   opacity:1;
   pointer-events:auto;
+  z-index: 10; /* above ddBtn when open */
 }
 
 #categoryDD .ddViewport{
@@ -1641,9 +1648,13 @@ color: rgba(245,250,255,.96) !important;
   align-items:center;
   justify-content:center;
   padding: 0 8px;
-  pointer-events:auto;
+  pointer-events:auto !important;
   user-select:none;
   -webkit-tap-highlight-color: transparent;
+  text-align:center;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
 }
 #categoryDD .ddActiveValue:focus{
   outline: none;
@@ -1662,22 +1673,13 @@ color: rgba(245,250,255,.96) !important;
   min-width: 38px;
   min-height: 38px;
   user-select:none;
-  pointer-events:auto;
+  pointer-events:auto !important;
   line-height:1;
   display:flex;
   align-items:center;
   justify-content:center;
-}
-
-#categoryDD .ddActiveValue{
-  flex:1;
-  text-align:center;
-  font-weight:900;
-  font-size:14px;
-  color:#fff;
-  cursor:pointer;
-  user-select:none;
-  padding: 0 6px;
+  flex-shrink: 0;
+  z-index: 11;
 }
 
 /* Glow strictly around button bounds */
