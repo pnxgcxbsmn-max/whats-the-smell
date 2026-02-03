@@ -632,48 +632,23 @@ async function tryLoadCachedGeneratedImage(charName) {
   }
 
   function ddOpen() {
-    if (state.busy || state.hasResult) return;
-    if (state.ddOpen) return;
-
-    console.log("[Dropdown] Opening dropdown");
-    state.ddOpen = true;
-    el.categoryBtn.classList.add("active");
-    el.categoryDD.classList.add("open"); // IMPORTANT: CSS uses .ddWrap.open
-    el.categoryBtn.setAttribute("aria-expanded", "true");
-
-    // Focus index sync
-    const idx = CATEGORIES.findIndex((x) => x.id === state.selectedCategory);
-    state.focusIndex = idx >= 0 ? idx : 0;
-    console.log(`[Dropdown] Focus synced to: ${state.focusIndex}`);
-    if (el.categoryValueActive) el.categoryValueActive.textContent = categoryLabelFor(state.selectedCategory);
+    // No-op: carousel is always open
   }
 
   function ddClose() {
-    if (!state.ddOpen) return;
-    console.log("[Dropdown] Closing dropdown");
-    state.ddOpen = false;
-
-    el.categoryBtn.classList.remove("active");
-    el.categoryDD.classList.remove("open");
-    el.categoryBtn.setAttribute("aria-expanded", "false");
-
-    // Ensure visible value stays correct
-    const label = categoryLabelFor(state.selectedCategory);
-    el.categoryValue.textContent = label;
-    if (el.categoryValueActive) el.categoryValueActive.textContent = label;
+    // No-op: carousel is always open
   }
 
   function ddToggle() {
-    if (state.ddOpen) ddClose();
-    else ddOpen();
+    // No-op: carousel is always open
   }
 
   function ddMove(delta) {
     const len = CATEGORIES.length;
-    console.log(`[Dropdown] Moving ${delta > 0 ? 'right' : 'left'}, total categories: ${len}, current focus: ${state.focusIndex}`);
+    console.log(`[Carousel] Moving ${delta > 0 ? 'right' : 'left'}, category count: ${len}, current index: ${state.focusIndex}`);
     state.focusIndex = (state.focusIndex + delta + len) % len;
     const nextId = CATEGORIES[state.focusIndex].id;
-    console.log(`[Dropdown] New focus index: ${state.focusIndex}, category ID: ${nextId}`);
+    console.log(`[Carousel] New index: ${state.focusIndex}, ID: ${nextId}`);
     setCategoryValue(nextId);
   }
 
@@ -693,101 +668,58 @@ function updateCarouselFocus() {
   function bindCategoryDropdown() {
     // Generate carousel items
     renderCategoryCarousel();
-    console.log(`[Dropdown] Binding dropdown with ${CATEGORIES.length} categories`);
+    console.log(`[Carousel] Initialized with ${CATEGORIES.length} categories`);
 
-    // MAIN: Click on button to toggle dropdown
-    el.categoryBtn.addEventListener("click", (e) => {
-      console.log("[Dropdown] Button clicked, target:", e.target, "ddOpen:", state.ddOpen);
-      // Only prevent drawer event propagation if drawer is actually open
-      if (state.ddOpen && e.target.closest(".ddDrawer")) {
-        console.log("[Dropdown] Click from drawer, ignoring");
-        return;
-      }
-      
-      e.preventDefault();
-      e.stopPropagation();
-      ddToggle();
-    });
-
-    // Some browsers may focus-shift on mousedown; keep it from cancelling click
-    el.categoryBtn.addEventListener("mousedown", (e) => { if (state.ddOpen) e.preventDefault(); });
-
-    // Arrow clicks
-    if (el.categoryArrowLeft) el.categoryArrowLeft.addEventListener("click", (e) => {
-      console.log("[Dropdown] Left arrow clicked");
-      e.preventDefault();
-      e.stopPropagation();
-      if (!state.ddOpen) ddOpen();
-      else {
-        ddMove(-1);
-        updateCarouselFocus();
-      }
-    });
-
-    if (el.categoryArrowRight) el.categoryArrowRight.addEventListener("click", (e) => {
-      console.log("[Dropdown] Right arrow clicked");
-      e.preventDefault();
-      e.stopPropagation();
-      if (!state.ddOpen) ddOpen();
-      else {
-        ddMove(1);
-        updateCarouselFocus();
-      }
-    });
-
-    // Confirm via clicking center label
-    if (el.categoryValueActive) {
-      el.categoryValueActive.addEventListener("click", (e) => {
-        console.log("[Dropdown] Center value clicked, ddOpen:", state.ddOpen);
+    // Arrow clicks - LEFT
+    if (el.categoryArrowLeft) {
+      el.categoryArrowLeft.addEventListener("click", (e) => {
+        console.log("[Carousel] Left arrow clicked");
         e.preventDefault();
         e.stopPropagation();
-        if (!state.ddOpen) {
-          // If dropdown is closed, open it instead
-          ddOpen();
-          return;
-        }
-        // If dropdown is open, confirm selection and close
-        el.categoryBtn.classList.add("confirm");
-        setTimeout(() => el.categoryBtn.classList.remove("confirm"), 180);
-        ddClose();
+        ddMove(-1);
       });
     }
 
-    // Keyboard when open
-    document.addEventListener("keydown", (e) => {
-      if (!state.ddOpen) return;
+    // Arrow clicks - RIGHT  
+    if (el.categoryArrowRight) {
+      el.categoryArrowRight.addEventListener("click", (e) => {
+        console.log("[Carousel] Right arrow clicked");
+        e.preventDefault();
+        e.stopPropagation();
+        ddMove(1);
+      });
+    }
 
+    // Center value click - confirms selection
+    if (el.categoryValueActive) {
+      el.categoryValueActive.addEventListener("click", (e) => {
+        console.log("[Carousel] Center clicked, category selected:", state.selectedCategory);
+        e.preventDefault();
+        e.stopPropagation();
+        // Just confirm - animation happens
+        el.categoryBtn.classList.add("confirm");
+        setTimeout(() => el.categoryBtn.classList.remove("confirm"), 180);
+      });
+    }
+
+    // Keyboard navigation
+    document.addEventListener("keydown", (e) => {
       if (e.key === "ArrowLeft") {
         e.preventDefault();
         ddMove(-1);
-        updateCarouselFocus();
         return;
       }
       if (e.key === "ArrowRight") {
         e.preventDefault();
         ddMove(1);
-        updateCarouselFocus();
         return;
       }
       if (e.key === "Enter") {
         e.preventDefault();
         el.categoryBtn.classList.add("confirm");
         setTimeout(() => el.categoryBtn.classList.remove("confirm"), 180);
-        ddClose();
         return;
       }
-      if (e.key === "Escape") {
-        e.preventDefault();
-        ddClose();
-        return;
-      }
-    });
-
-    // Click outside to close
-    document.addEventListener("click", (e) => {
-      if (!state.ddOpen) return;
-      const inside = e.target.closest("#categoryDD");
-      if (!inside) ddClose();
     });
   }
 
