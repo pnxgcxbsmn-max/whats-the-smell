@@ -1,38 +1,26 @@
 /**
- * Early Access Gate (Beta)
- * Pantalla de contraseña antes del sitio principal
- * Password: reymono95
+ * Early Access Gate (Beta) - DISABLED
+ * Gate access has been completely disabled
  */
 
-const GATE_VERSION = "2026-01-26-v2";
-const BETA_PASSWORD = "reymono95";
+const GATE_VERSION = "2026-02-03-disabled";
 
-// ===== ENVIRONMENT VARIABLES =====
-// Set WTS_SKIP_GATE=true in localStorage to bypass gate ONLY in development
-const SKIP_GATE_FOR_DEV = localStorage.getItem("WTS_SKIP_GATE") === "true";
-const IS_DEVELOPMENT = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
-// Solo skip si AMBAS condiciones son verdaderas: development AND explícito flag
-const SHOULD_SKIP_GATE = IS_DEVELOPMENT && SKIP_GATE_FOR_DEV;
+// ===== GATE DISABLED =====
+// Always bypass the gate and show the main site
+const SHOULD_SKIP_GATE = true;
 
-// Debug: mostrar que se cargó la versión correcta
-console.log("%c[GATE] Loaded version: " + GATE_VERSION, "color: lime; font-size: 16px; font-weight: bold;");
-console.log("%c[GATE] Development mode: " + IS_DEVELOPMENT, "color: cyan; font-size: 14px;");
-if (SHOULD_SKIP_GATE) {
-  console.log("%c[GATE] ⚠️ SKIPPING GATE - Development mode activated", "color: yellow; font-size: 14px; font-weight: bold;");
-}
+// Debug
+console.log("%c[GATE] DISABLED - Gate access is completely bypassed", "color: red; font-size: 16px; font-weight: bold;");
 
 const ACCESS_TOKEN_KEY = "beta_access_token";
 const GENERATION_LIMIT = 10;
-const LIMIT_WINDOW = 24 * 60 * 60 * 1000; // 24 horas en ms
+const LIMIT_WINDOW = 24 * 60 * 60 * 1000;
 
-// Flag para evitar reiniciar el gate después de acceso
 let accessGranted = false;
 const ACCESS_GRANTED_KEY = "beta_access_granted";
 
-// Sistema de idioma
 let currentAccessGateLang = localStorage.getItem("accessGateLang") || "en";
 
-// Traducciones precargadas
 const TRANSLATIONS = {
   en: {
     title: "BETA ACCESS",
@@ -57,27 +45,14 @@ const TRANSLATIONS = {
 };
 
 /**
- * Inicializa la puerta de acceso
+ * Inicializa la puerta de acceso - DISABLED
  */
 function initAccessGate() {
-  // ===== SKIP GATE FOR DEVELOPMENT =====
-  if (SHOULD_SKIP_GATE) {
-    console.log("%c[GATE] Bypassing access gate (development mode)", "color: yellow; font-size: 12px;");
-    accessGranted = true;
-    localStorage.setItem(ACCESS_GRANTED_KEY, "true");
-    showMainSite();
-    return;
-  }
-
-  // Si ya se otorgó acceso, no reiniciar
-  if (accessGranted || localStorage.getItem(ACCESS_GRANTED_KEY) === "true") {
-    accessGranted = true;
-    showMainSite();
-    return;
-  }
-
-  // Si ya tiene acceso válido, mostrar sitio
-  if (hasValidAccess()) {
+  console.log("%c[GATE] Bypassing access gate (disabled)", "color: lime; font-size: 12px;");
+  accessGranted = true;
+  localStorage.setItem(ACCESS_GRANTED_KEY, "true");
+  showMainSite();
+  return;
     accessGranted = true;
     localStorage.setItem(ACCESS_GRANTED_KEY, "true");
     showMainSite();

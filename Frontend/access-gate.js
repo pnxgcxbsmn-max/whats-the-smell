@@ -1,23 +1,19 @@
 /**
- * Early Access Gate (Beta)
- * Pantalla de contraseña antes del sitio principal
- * Password: reymono95
+ * Early Access Gate (Beta) - DISABLED
+ * Gate access has been completely disabled
  */
 
-const GATE_VERSION = "20240126-02";
-const BETA_PASSWORD = "reymono95";
+const GATE_VERSION = "2026-02-03-disabled";
+
 const ACCESS_TOKEN_KEY = "beta_access_token";
 const GENERATION_LIMIT = 10;
-const LIMIT_WINDOW = 24 * 60 * 60 * 1000; // 24 horas en ms
+const LIMIT_WINDOW = 24 * 60 * 60 * 1000;
 
-// Flag para evitar reiniciar el gate después de acceso
 let accessGranted = false;
 const ACCESS_GRANTED_KEY = "beta_access_granted";
 
-// Sistema de idioma
 let currentAccessGateLang = localStorage.getItem("accessGateLang") || "en";
 
-// Traducciones precargadas
 const TRANSLATIONS = {
   en: {
     title: "BETA ACCESS",
@@ -42,22 +38,14 @@ const TRANSLATIONS = {
 };
 
 /**
- * Inicializa la puerta de acceso
+ * Inicializa la puerta de acceso - DISABLED
  */
 function initAccessGate() {
-  console.info(`[Gate] version ${GATE_VERSION}`);
-
-  // Si ya se otorgó acceso, no reiniciar
-  if (accessGranted || localStorage.getItem(ACCESS_GRANTED_KEY) === "true") {
-    accessGranted = true;
-    showMainSite();
-    return;
-  }
-
-  // Si ya tiene acceso válido, mostrar sitio
-  if (hasValidAccess()) {
-    accessGranted = true;
-    localStorage.setItem(ACCESS_GRANTED_KEY, "true");
+  console.log("%c[GATE] DISABLED - Gate access is completely bypassed", "color: red; font-size: 16px; font-weight: bold;");
+  accessGranted = true;
+  localStorage.setItem(ACCESS_GRANTED_KEY, "true");
+  showMainSite();
+  return;
     showMainSite();
     return;
   }
