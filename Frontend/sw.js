@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v6-20260203-pointereventfix";
+const CACHE_VERSION = "v7-20260204-carousel-fix";
 const CACHE_NAME = `wts-cache-${CACHE_VERSION}`;
 const CRITICAL_ASSETS = [
   "/",
