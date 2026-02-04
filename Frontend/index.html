@@ -937,56 +937,84 @@
       }
     }
 
-    @keyframes starMoveLeft {
+    @keyframes shootingStar {
       0% {
-        right: -50px;
+        transform: translate3d(var(--from-x, -10vw), var(--from-y, 20vh), 0) rotate(var(--angle, 0deg)) scale(var(--scale, 1));
         opacity: 0;
       }
       10% {
-        opacity: 0.6;
+        opacity: 0.95;
       }
       90% {
-        opacity: 0.6;
+        opacity: 0.85;
       }
       100% {
-        right: 100vw;
-        opacity: 0;
-      }
-    }
-
-    @keyframes starMoveRight {
-      0% {
-        left: -50px;
-        opacity: 0;
-      }
-      10% {
-        opacity: 0.5;
-      }
-      90% {
-        opacity: 0.5;
-      }
-      100% {
-        left: 100vw;
+        transform: translate3d(calc(var(--from-x, -10vw) + var(--dx, 120vw)), calc(var(--from-y, 20vh) + var(--dy, -18vh)), 0) rotate(var(--angle, 0deg)) scale(var(--scale, 1));
         opacity: 0;
       }
     }
 
     .star {
       position: fixed;
-      width: 2px;
-      height: 2px;
-      background: radial-gradient(circle, rgba(255,255,255,0.8), rgba(255,255,255,0));
-      border-radius: 50%;
+      width: 3px;
+      height: 3px;
+      background: radial-gradient(circle, rgba(255,255,255,0.95), rgba(255,255,255,0));
+      border-radius: 999px;
       pointer-events: none;
+      z-index: 1;
+      filter: drop-shadow(0 0 6px rgba(255,255,255,0.4));
+      transform: translate3d(var(--from-x, -10vw), var(--from-y, 20vh), 0) rotate(var(--angle, 0deg)) scale(var(--scale, 1));
+      animation: shootingStar var(--duration, 9s) linear infinite;
+      animation-delay: var(--delay, 0s);
+      opacity: 0;
+      mix-blend-mode: screen;
+      will-change: transform, opacity;
+    }
+
+    .star::after {
+      content: "";
+      position: absolute;
+      right: 100%;
+      top: 50%;
+      width: clamp(50px, 12vw, 140px);
+      height: 2px;
+      background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,0.9), rgba(255,255,255,0));
+      opacity: 0.9;
+      transform: translateY(-50%);
+      filter: blur(0.4px);
+      pointer-events: none;
+    }
+
+    .cloud-layer{
+      position: fixed;
+      inset: 0;
       z-index: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(80% 50% at 20% 30%, rgba(255,255,255,0.08), transparent 55%),
+        radial-gradient(70% 50% at 70% 60%, rgba(120,170,255,0.07), transparent 60%),
+        radial-gradient(60% 40% at 50% 80%, rgba(80,120,200,0.05), transparent 65%);
+      opacity: 0.18;
+      filter: blur(14px);
+      mix-blend-mode: screen;
+      transform: translate3d(0,0,0);
+      transition: opacity 0.8s ease;
+      animation: cloudDrift 36s ease-in-out infinite alternate;
     }
 
-    .star-left {
-      animation: starMoveLeft 8s linear infinite;
+    .cloud-layer.alt{
+      opacity: 0.12;
+      animation-duration: 48s;
+      animation-direction: alternate-reverse;
     }
 
-    .star-right {
-      animation: starMoveRight 10s linear infinite;
+    .cloud-layer.is-active{
+      opacity: 0.24;
+    }
+
+    @keyframes cloudDrift{
+      from{ transform: translate3d(-6%, -3%, 0) scale(1.02); }
+      to  { transform: translate3d(8%, 4%, 0) scale(1.06); }
     }
 
     #characterImg{
@@ -1713,6 +1741,12 @@ color: rgba(245,250,255,.96) !important;
     object-position:center 18%;
     transform: scale(1.10);
     display:block;
+    opacity:0;
+    transition: opacity .35s ease-out;
+  }
+
+  #characterImg.is-visible{
+    opacity:1;
   }
   .curiosityBox{
     margin-top: 10px;
@@ -1729,12 +1763,14 @@ color: rgba(245,250,255,.96) !important;
 
 <body>
   <!-- Animated background stars -->
-  <div class="star star-left" style="top: 15%; right: 0;"></div>
-  <div class="star star-right" style="top: 25%; left: 0; animation-delay: 2s;"></div>
-  <div class="star star-left" style="top: 45%; right: 0; animation-delay: 4s;"></div>
-  <div class="star star-right" style="top: 65%; left: 0; animation-delay: 1s;"></div>
-  <div class="star star-left" style="top: 80%; right: 0; animation-delay: 3s;"></div>
-  <div class="star star-right" style="top: 35%; left: 0; animation-delay: 5s;"></div>
+  <div class="star"></div>
+  <div class="star"></div>
+  <div class="star"></div>
+  <div class="star"></div>
+  <div class="star"></div>
+  <div class="star"></div>
+  <div class="cloud-layer"></div>
+  <div class="cloud-layer alt"></div>
   
   <div class="topbar">
     <!-- LOGO replaces title -->
@@ -1865,6 +1901,55 @@ color: rgba(245,250,255,.96) !important;
     <span class="studioText">ReyMono Studio │ Creative Lab</span>
     <img class="studioLogo" src="assets/brand/businesslogo.png" alt="ReyMono Studio Logo" />
   </div>
+
+  <script>
+    function randomizeStar(star) {
+      const dir = Math.random() > 0.5 ? 1 : -1;
+      const startY = `${Math.random() * 100}vh`;
+      const startX = dir === 1 ? "-12vw" : "112vw";
+      const dxVal = dir === 1 ? 130 : -130;
+      const dyVal = (Math.random() * 60) - 30;
+      const duration = 7.5 + Math.random() * 4.5;
+      const delay = Math.random() * 6;
+      const angle = Math.atan2(dyVal, dxVal) * 180 / Math.PI;
+
+      star.style.setProperty("--from-x", startX);
+      star.style.setProperty("--from-y", startY);
+      star.style.setProperty("--dx", `${dxVal}vw`);
+      star.style.setProperty("--dy", `${dyVal}vh`);
+      star.style.setProperty("--angle", `${angle}deg`);
+      star.style.setProperty("--duration", `${duration}s`);
+      star.style.setProperty("--delay", `${delay}s`);
+      star.style.setProperty("--scale", `${0.85 + Math.random() * 0.35}`);
+    }
+
+    function seedStars(count = 12) {
+      const stars = Array.from(document.querySelectorAll(".star"));
+      const needed = count - stars.length;
+      for (let i = 0; i < needed; i++) {
+        const node = document.createElement("div");
+        node.className = "star";
+        document.body.appendChild(node);
+        stars.push(node);
+      }
+
+      stars.forEach((star) => {
+        randomizeStar(star);
+        star.addEventListener("animationiteration", () => randomizeStar(star));
+      });
+    }
+
+    function initCloudMotion() {
+      document.querySelectorAll(".cloud-layer").forEach(layer => {
+        layer.classList.add("is-active");
+      });
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      seedStars(14);
+      initCloudMotion();
+    });
+  </script>
 
   <script>
     // Force-clean previous service workers and caches to avoid stale assets in this session

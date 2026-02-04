@@ -4,7 +4,7 @@
   // Robust bindings: language + category + generate
   // =========================
 
-  console.log("%c[APP] LOADED - Version 2026-02-03-v2 with pointer-events fix", "color: lime; font-size: 14px; font-weight: bold;");
+  console.log("%c[APP] LOADED - Version 2026-02-04-v3 console-marker", "color: lime; font-size: 14px; font-weight: bold;");
 
   // ===== API base (works for localhost:3000 + prod) =====
   const API = (() => {
@@ -1152,14 +1152,21 @@ function updateCarouselFocus() {
           console.log("Lazy loaded image:", url.slice(0, 50));
           
           // Hide loading spinner when image successfully loads
-          entry.target.onload = () => {
-            hideLoadingSpinner();
-            entry.target.onload = null; // Clean up listener
-          };
-          entry.target.onerror = () => {
-            hideLoadingSpinner();
-            entry.target.onerror = null; // Clean up listener
-          };
+            entry.target.onload = () => {
+              hideLoadingSpinner();
+              const frame = entry.target.closest('.imgFrame');
+              if (frame) frame.classList.remove("spinning");
+              entry.target.classList.add("is-visible");
+              entry.target.style.opacity = "1";
+              entry.target.onload = null; // Clean up listener
+            };
+            entry.target.onerror = () => {
+              hideLoadingSpinner();
+              const frame = entry.target.closest('.imgFrame');
+              if (frame) frame.classList.remove("spinning");
+              entry.target.style.opacity = "0";
+              entry.target.onerror = null; // Clean up listener
+            };
         }
       });
     }, {
@@ -1177,6 +1184,10 @@ function updateCarouselFocus() {
     }
 
     try {
+        if (el.characterImg) {
+          el.characterImg.classList.remove("is-visible");
+          el.characterImg.style.opacity = "0";
+        }
       showLoadingSpinner();
       const univ = String(universe || "").trim();
       let url = `${API}/api/ai-image?name=${encodeURIComponent(name)}&category=${encodeURIComponent(categoryId || "any")}&style=anime`;
@@ -1215,6 +1226,10 @@ function updateCarouselFocus() {
         if (loaded) {
           console.log("Fallback cached image loaded from /generated");
           hideLoadingSpinner();
+          const frame = el.characterImg.closest('.imgFrame');
+          if (frame) frame.classList.remove("spinning");
+          el.characterImg.classList.add("is-visible");
+          el.characterImg.style.opacity = "1";
           return;
         }
       } catch (e) {
@@ -1329,13 +1344,6 @@ function updateCarouselFocus() {
     if (state.hasResult) return;
     clearError();
 
-    // INICIAR ANIMACIÓN DE FONDO INMEDIATAMENTE
-    const imgFrame = document.querySelector('.imgFrame');
-    if (imgFrame) {
-      imgFrame.classList.add("spinning");
-    }
-    showLoadingSpinner();
-
     // ===== RATE LIMITING CHECK (Beta Early Access) =====
     if (typeof hasReachedGenerationLimit === "function" && hasReachedGenerationLimit()) {
       const limitInfo = getGenerationLimitInfo();
@@ -1355,6 +1363,13 @@ function updateCarouselFocus() {
       showError(t("selectCategory"), "selectCategory");
       return;
     }
+
+    // INICIAR ANIMACIÓN SOLO CUANDO LOS DATOS SON VÁLIDOS
+    const imgFrame = document.querySelector('.imgFrame');
+    if (imgFrame) {
+      imgFrame.classList.add("spinning");
+    }
+    showLoadingSpinner();
 
     setBusy(true);
     setStatus("working");
@@ -1452,19 +1467,42 @@ function updateCarouselFocus() {
       });
     } catch (e) {
       showError(String(e?.message || e));
+      stopLoadingScreen();
       setStatus("idle");
+      hideLoadingSpinner();
+      const frame = document.querySelector('.imgFrame');
+      if (frame) frame.classList.remove("spinning");
     } finally {
       setBusy(false);
       // Lock inputs after a successful result
-      if (state.hasResult) applyLocks();
+      if (state.hasResult) {
+        applyLocks();
+      } else {
+        hideLoadingSpinner();
+        const frame = document.querySelector('.imgFrame');
+        if (frame) frame.classList.remove("spinning");
+        stopLoadingScreen();
+      }
     }
   }
 
   function onClear() {
     // Hard reset sin recargar la página (evita que el gate pida contraseña de nuevo)
+    stopLoadingScreen();
+    hideLoadingSpinner();
+    const frame = document.querySelector('.imgFrame');
+    if (frame) frame.classList.remove("spinning");
+    el.characterImg.classList.remove("is-visible");
+
     state.busy = false;
     state.hasResult = false;
+    state.resultEn = null;
     state.resultEs = null;
+    state.lastCharacter = "";
+    state.officialName = "";
+    state.characterName = "";
+    state.characterUniverse = "";
+    state.currentErrorKey = null;
     state.selectedCategory = "any";
     
     // Limpiar inputs
@@ -1490,17 +1528,19 @@ function updateCarouselFocus() {
     if (el.visualImg1) el.visualImg1.src = "";
     if (el.visualImg2) el.visualImg2.src = "";
     
-    // Hide loading spinner
-    hideLoadingSpinner();
     el.characterImg.style.display = "none";
     el.characterImg.removeAttribute("src");
     el.characterImg.removeAttribute("data-lazy-image-url");
+    el.characterImg.style.opacity = "0";
     
     // Reset listas de aroma
     const noteElements = document.querySelectorAll("[id^='compImg']");
     noteElements.forEach(el => el.classList.remove("tone-generic", "tone-top", "tone-heart", "tone-base"));
     document.querySelectorAll("[id^='compName']").forEach(el => el.textContent = "—");
     
+    setStatus("idle");
+    renderResultForCurrentLang();
+
     // Aplicar bloqueos
     applyLocks();
     applyStaticText();
