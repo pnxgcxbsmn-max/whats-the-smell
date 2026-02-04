@@ -669,6 +669,12 @@ function updateCarouselFocus() {
     // Generate carousel items
     renderCategoryCarousel();
     console.log(`[Carousel] Initialized with ${CATEGORIES.length} categories`);
+    console.log(`[Carousel] Elements found:`, {
+      ddBtn: !!el.categoryBtn,
+      arrowLeft: !!el.categoryArrowLeft,
+      arrowRight: !!el.categoryArrowRight,
+      valueActive: !!el.categoryValueActive
+    });
 
     // Arrow clicks - LEFT
     if (el.categoryArrowLeft) {
@@ -678,6 +684,9 @@ function updateCarouselFocus() {
         e.stopPropagation();
         ddMove(-1);
       });
+      console.log("[Carousel] Left arrow listener attached");
+    } else {
+      console.error("[Carousel] Left arrow element NOT FOUND");
     }
 
     // Arrow clicks - RIGHT  
@@ -688,6 +697,9 @@ function updateCarouselFocus() {
         e.stopPropagation();
         ddMove(1);
       });
+      console.log("[Carousel] Right arrow listener attached");
+    } else {
+      console.error("[Carousel] Right arrow element NOT FOUND");
     }
 
     // Center value click - confirms selection
@@ -700,6 +712,9 @@ function updateCarouselFocus() {
         el.categoryBtn.classList.add("confirm");
         setTimeout(() => el.categoryBtn.classList.remove("confirm"), 180);
       });
+      console.log("[Carousel] Center value listener attached");
+    } else {
+      console.error("[Carousel] Center value element NOT FOUND");
     }
 
     // Keyboard navigation
@@ -721,6 +736,7 @@ function updateCarouselFocus() {
         return;
       }
     });
+    console.log("[Carousel] Keyboard listeners attached");
   }
 
   
@@ -1514,6 +1530,7 @@ function updateCarouselFocus() {
 
   // ===== Boot =====
   function boot() {
+    console.log("[Boot] Application starting...");
     // Set default language to English on first load
     if (!el.langSelect.value) {
       el.langSelect.value = "en";

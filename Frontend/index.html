@@ -632,8 +632,8 @@
     .ddDrawer{
   position:absolute;
   inset:0;
-  opacity:0;
-  pointer-events:none;
+  opacity:1;
+  pointer-events:auto;
   transition: opacity 120ms ease;
   background: transparent;
   z-index: 2;
@@ -1605,15 +1605,10 @@ color: rgba(245,250,255,.96) !important;
   opacity:1;
   pointer-events:auto;
   z-index: 10;
-  display:flex;
-  flex-direction: column;
-  align-items:center;
-  justify-content:center;
-
-  /* Transparent overlay - background visible through it */
   background: transparent;
   backdrop-filter: none;
   transition: opacity 120ms ease;
+  /* Layout handled by .ddViewport, not here */
 }
 
 #categoryDD .ddViewport{
@@ -1623,8 +1618,8 @@ color: rgba(245,250,255,.96) !important;
   align-items:center;
   justify-content:space-between;
   padding: 0 8px;
-  cursor: pointer;
-  touch-action: manipulation;
+  cursor:pointer;
+  pointer-events: auto;
 }
 
 
