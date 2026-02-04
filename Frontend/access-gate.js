@@ -46,12 +46,6 @@ function initAccessGate() {
   localStorage.setItem(ACCESS_GRANTED_KEY, "true");
   showMainSite();
   return;
-    showMainSite();
-    return;
-  }
-
-  // Mostrar puerta de acceso
-  showAccessGate();
 }
 
 /**

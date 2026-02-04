@@ -4,6 +4,8 @@
   // Robust bindings: language + category + generate
   // =========================
 
+  console.log("%c[APP] LOADED - Version 2026-02-03-v2 with pointer-events fix", "color: lime; font-size: 14px; font-weight: bold;");
+
   // ===== API base (works for localhost:3000 + prod) =====
   const API = (() => {
     const forced = String(window.WTS_API_BASE || "").trim().replace(/\/+$/, "");
@@ -236,13 +238,15 @@
   };
 
   // ===== Categories =====
-  const CATEGORIES = [
-    { id: "any",    en: "Choose one",       es: "Elige una" },
-    { id: "anime",  en: "Anime/Manga",      es: "Anime/Manga" },
-    { id: "games",  en: "Video Games",      es: "Videojuegos" },
-    { id: "movies", en: "Movies/TV",        es: "Películas/TV" },
-    { id: "comics", en: "Comics",           es: "Cómics" },
-    { id: "myth",   en: "Myth/Folklore",    es: "Mito/Folclore" },
+    const CATEGORIES = [
+    { id: "any",      en: "Choose one",        es: "Elige una" },
+    { id: "anime",    en: "Anime/Manga",       es: "Anime/Manga" },
+    { id: "games",    en: "Video Games",       es: "Videojuegos" },
+    { id: "movies",   en: "Movies/TV",         es: "Películas/TV" },
+    { id: "comics",   en: "Comics",            es: "Cómics" },
+    { id: "books",    en: "Books/Novels",      es: "Libros/Novelas" },
+    { id: "cartoons", en: "Cartoons",          es: "Caricaturas" },
+    { id: "myth",     en: "Myth/Folklore",     es: "Mito/Folclore" },
   ];
 
   // ===== State =====
@@ -646,10 +650,12 @@ async function tryLoadCachedGeneratedImage(charName) {
   function ddMove(delta) {
     const len = CATEGORIES.length;
     console.log(`[Carousel] Moving ${delta > 0 ? 'right' : 'left'}, category count: ${len}, current index: ${state.focusIndex}`);
+    console.log(`[Carousel] Categories available:`, CATEGORIES.map(c => c.id));
     state.focusIndex = (state.focusIndex + delta + len) % len;
     const nextId = CATEGORIES[state.focusIndex].id;
     console.log(`[Carousel] New index: ${state.focusIndex}, ID: ${nextId}`);
     setCategoryValue(nextId);
+    renderCategoryCarousel();
   }
 
   
@@ -658,7 +664,10 @@ function renderCategoryCarousel() {
   // The previous ddRail/ddItem carousel could block pointer hitboxes on the viewport in some browsers.
   // We keep the drawer minimal: arrows + active label only.
   const label = categoryLabelFor(state.selectedCategory);
-  if (el.categoryValueActive) el.categoryValueActive.textContent = label;
+  if (el.categoryValueActive) {
+    el.categoryValueActive.textContent = label;
+    console.log(`[Carousel] Rendered category: ${state.selectedCategory} (${label}), focusIndex: ${state.focusIndex}`);
+  }
 }
 
 function updateCarouselFocus() {
@@ -669,14 +678,25 @@ function updateCarouselFocus() {
     // Generate carousel items
     renderCategoryCarousel();
     console.log(`[Carousel] Initialized with ${CATEGORIES.length} categories`);
-    console.log(`[Carousel] Elements found:`, {
-      ddBtn: !!el.categoryBtn,
-      arrowLeft: !!el.categoryArrowLeft,
-      arrowRight: !!el.categoryArrowRight,
-      valueActive: !!el.categoryValueActive
-    });
 
-    // Arrow clicks - LEFT
+    // Toggle "active" mode to show/hide carousel controls
+    function setCategoryActive(on) {
+      const isOn = !!on;
+      state.ddOpen = isOn;
+      if (el.categoryBtn) {
+        el.categoryBtn.classList.toggle("active", isOn);
+        console.log(`[Carousel] Active mode: ${isOn}`);
+      }
+    }
+
+    function confirmCategory() {
+      if (!el.categoryBtn) return;
+      el.categoryBtn.classList.add("confirm");
+      setTimeout(() => el.categoryBtn.classList.remove("confirm"), 180);
+      setCategoryActive(false);
+    }
+
+    // Arrow clicks - LEFT (only when active)
     if (el.categoryArrowLeft) {
       el.categoryArrowLeft.addEventListener("click", (e) => {
         console.log("[Carousel] Left arrow clicked");
@@ -685,11 +705,9 @@ function updateCarouselFocus() {
         ddMove(-1);
       });
       console.log("[Carousel] Left arrow listener attached");
-    } else {
-      console.error("[Carousel] Left arrow element NOT FOUND");
     }
 
-    // Arrow clicks - RIGHT  
+    // Arrow clicks - RIGHT (only when active)
     if (el.categoryArrowRight) {
       el.categoryArrowRight.addEventListener("click", (e) => {
         console.log("[Carousel] Right arrow clicked");
@@ -698,27 +716,49 @@ function updateCarouselFocus() {
         ddMove(1);
       });
       console.log("[Carousel] Right arrow listener attached");
-    } else {
-      console.error("[Carousel] Right arrow element NOT FOUND");
     }
 
-    // Center value click - confirms selection
+    // Center button - confirms selection
     if (el.categoryValueActive) {
       el.categoryValueActive.addEventListener("click", (e) => {
-        console.log("[Carousel] Center clicked, category selected:", state.selectedCategory);
+        console.log("[Carousel] Center clicked, confirming:", state.selectedCategory);
         e.preventDefault();
         e.stopPropagation();
-        // Just confirm - animation happens
-        el.categoryBtn.classList.add("confirm");
-        setTimeout(() => el.categoryBtn.classList.remove("confirm"), 180);
+        confirmCategory();
       });
       console.log("[Carousel] Center value listener attached");
-    } else {
-      console.error("[Carousel] Center value element NOT FOUND");
     }
 
-    // Keyboard navigation
+    // Button click - toggle active mode
+    if (el.categoryBtn) {
+      el.categoryBtn.addEventListener("click", (e) => {
+        const t = e.target;
+        // Don't activate if clicking arrows or center
+        if (
+          t === el.categoryArrowLeft ||
+          t === el.categoryArrowRight ||
+          t === el.categoryValueActive
+        ) {
+          return;
+        }
+        
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const isActive = el.categoryBtn.classList.contains("active");
+        setCategoryActive(!isActive);
+        if (!isActive) {
+          el.categoryBtn.focus?.();
+        }
+      });
+      console.log("[Carousel] Button click listener attached");
+    }
+
+    // Keyboard navigation (only when active)
     document.addEventListener("keydown", (e) => {
+      const isActive = el.categoryBtn?.classList.contains("active");
+      if (!isActive) return;
+
       if (e.key === "ArrowLeft") {
         e.preventDefault();
         ddMove(-1);
@@ -731,8 +771,12 @@ function updateCarouselFocus() {
       }
       if (e.key === "Enter") {
         e.preventDefault();
-        el.categoryBtn.classList.add("confirm");
-        setTimeout(() => el.categoryBtn.classList.remove("confirm"), 180);
+        confirmCategory();
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setCategoryActive(false);
         return;
       }
     });

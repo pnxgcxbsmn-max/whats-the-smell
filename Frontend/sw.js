@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v5-20260203";
+const CACHE_VERSION = "v6-20260203-pointereventfix";
 const CACHE_NAME = `wts-cache-${CACHE_VERSION}`;
 const CRITICAL_ASSETS = [
   "/",
