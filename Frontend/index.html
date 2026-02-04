@@ -1576,7 +1576,7 @@ color: rgba(245,250,255,.96) !important;
 
   position: relative !important;
   overflow: visible !important;
-  z-index: 20 !important; /* always above drawer */
+  z-index: 10 !important; /* below active drawer */
   transition: opacity 0.3s ease, filter 0.3s ease;
   pointer-events: auto !important;
 }
@@ -1603,7 +1603,7 @@ color: rgba(245,250,255,.96) !important;
   border-radius: 14px;
   opacity:0;
   pointer-events:none;
-  z-index: 10;
+  z-index: 50 !important;
   background: transparent;
   backdrop-filter: none;
   transition: opacity 120ms ease;
@@ -1612,7 +1612,7 @@ color: rgba(245,250,255,.96) !important;
 #categoryDD .ddBtn.active ~ .ddDrawer {
   opacity: 1;
   pointer-events: auto;
-  z-index: 30;
+  z-index: 50 !important;
 }
 
 #categoryDD .ddViewport{
@@ -1694,7 +1694,6 @@ color: rgba(245,250,255,.96) !important;
 
 /* Glow strictly around button bounds */
 #categoryDD .ddBtn.active{
-  z-index: 5 !important;
   border-color: rgba(120, 220, 255, 0.85) !important;
   background:
     linear-gradient(180deg, rgba(12,18,34,.40), rgba(10,16,30,.28)),
