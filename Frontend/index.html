@@ -1612,6 +1612,7 @@ color: rgba(245,250,255,.96) !important;
 #categoryDD .ddBtn.active ~ .ddDrawer {
   opacity: 1;
   pointer-events: auto;
+  z-index: 30;
 }
 
 #categoryDD .ddViewport{
@@ -1693,6 +1694,7 @@ color: rgba(245,250,255,.96) !important;
 
 /* Glow strictly around button bounds */
 #categoryDD .ddBtn.active{
+  z-index: 5 !important;
   border-color: rgba(120, 220, 255, 0.85) !important;
   background:
     linear-gradient(180deg, rgba(12,18,34,.40), rgba(10,16,30,.28)),
