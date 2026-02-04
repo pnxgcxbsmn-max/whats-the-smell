@@ -780,6 +780,19 @@ function updateCarouselFocus() {
         return;
       }
     });
+
+    // Click outside to close
+    document.addEventListener("click", (e) => {
+      const isActive = el.categoryBtn?.classList.contains("active");
+      if (!isActive) return;
+
+      const categoryWrap = document.getElementById("categoryDD");
+      if (categoryWrap && !categoryWrap.contains(e.target)) {
+        setCategoryActive(false);
+        console.log("[Carousel] Closed by outside click");
+      }
+    });
+
     console.log("[Carousel] Keyboard listeners attached");
   }
 
