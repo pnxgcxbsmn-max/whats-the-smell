@@ -937,34 +937,38 @@
       }
     }
 
-    @keyframes shootingStar {
+    @keyframes fallingStar {
       0% {
-        transform: translate3d(var(--from-x, -10vw), var(--from-y, 20vh), 0) rotate(var(--angle, 0deg)) scale(var(--scale, 1));
+        transform: translate3d(var(--from-x, -10vw), var(--from-y, -20vh), 0) rotate(var(--angle, 0deg)) scale(var(--scale, 1));
         opacity: 0;
       }
       10% {
-        opacity: 0.95;
+        opacity: 0;
       }
-      90% {
-        opacity: 0.85;
+      16% {
+        opacity: 0.9;
+      }
+      30% {
+        transform: translate3d(var(--to-x, 60vw), var(--to-y, 120vh), 0) rotate(var(--angle, 0deg)) scale(var(--scale, 1));
+        opacity: 0;
       }
       100% {
-        transform: translate3d(calc(var(--from-x, -10vw) + var(--dx, 120vw)), calc(var(--from-y, 20vh) + var(--dy, -18vh)), 0) rotate(var(--angle, 0deg)) scale(var(--scale, 1));
+        transform: translate3d(var(--to-x, 60vw), var(--to-y, 120vh), 0) rotate(var(--angle, 0deg)) scale(var(--scale, 1));
         opacity: 0;
       }
     }
 
     .star {
       position: fixed;
-      width: 3px;
-      height: 3px;
-      background: radial-gradient(circle, rgba(255,255,255,0.95), rgba(255,255,255,0));
+      width: 2px;
+      height: 2px;
+      background: radial-gradient(circle, rgba(255,255,255,0.95), rgba(255,255,255,0.15));
       border-radius: 999px;
       pointer-events: none;
-      z-index: 1;
-      filter: drop-shadow(0 0 6px rgba(255,255,255,0.4));
-      transform: translate3d(var(--from-x, -10vw), var(--from-y, 20vh), 0) rotate(var(--angle, 0deg)) scale(var(--scale, 1));
-      animation: shootingStar var(--duration, 9s) linear infinite;
+      z-index: 0;
+      filter: drop-shadow(0 0 6px rgba(255,255,255,0.35));
+      transform: translate3d(var(--from-x, -10vw), var(--from-y, -20vh), 0) rotate(var(--angle, 0deg)) scale(var(--scale, 1));
+      animation: fallingStar var(--cycle, 18s) linear infinite;
       animation-delay: var(--delay, 0s);
       opacity: 0;
       mix-blend-mode: screen;
@@ -976,12 +980,12 @@
       position: absolute;
       right: 100%;
       top: 50%;
-      width: clamp(50px, 12vw, 140px);
-      height: 2px;
-      background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,0.9), rgba(255,255,255,0));
-      opacity: 0.9;
+      width: clamp(80px, 14vw, 180px);
+      height: 1px;
+      background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,0.7), rgba(255,255,255,0));
+      opacity: 0.6;
       transform: translateY(-50%);
-      filter: blur(0.4px);
+      filter: blur(0.8px);
       pointer-events: none;
     }
 
@@ -1763,12 +1767,8 @@ color: rgba(245,250,255,.96) !important;
 
 <body>
   <!-- Animated background stars -->
-  <div class="star"></div>
-  <div class="star"></div>
-  <div class="star"></div>
-  <div class="star"></div>
-  <div class="star"></div>
-  <div class="star"></div>
+  <div class="star" data-star="a"></div>
+  <div class="star" data-star="b"></div>
   <div class="cloud-layer"></div>
   <div class="cloud-layer alt"></div>
   
@@ -1903,40 +1903,26 @@ color: rgba(245,250,255,.96) !important;
   </div>
 
   <script>
-    function randomizeStar(star) {
-      const dir = Math.random() > 0.5 ? 1 : -1;
-      const startY = `${Math.random() * 100}vh`;
-      const startX = dir === 1 ? "-12vw" : "112vw";
-      const dxVal = dir === 1 ? 130 : -130;
-      const dyVal = (Math.random() * 60) - 30;
-      const duration = 7.5 + Math.random() * 4.5;
-      const delay = Math.random() * 6;
-      const angle = Math.atan2(dyVal, dxVal) * 180 / Math.PI;
+    function randomizeStar(star, index) {
+      const dir = index % 2 === 0 ? 1 : -1;
+      const startY = `${-10 - Math.random() * 30}vh`;
+      const endY = `${110 + Math.random() * 25}vh`;
+
+      const startX = dir === 1 ? `${-20 - Math.random() * 20}vw` : `${100 + Math.random() * 20}vw`;
+      const endX = dir === 1 ? `${55 + Math.random() * 25}vw` : `${45 - Math.random() * 25}vw`;
+
+      const angle = Math.atan2(parseFloat(endY) - parseFloat(startY), parseFloat(endX) - parseFloat(startX)) * 180 / Math.PI;
+      const cycle = 18;
+      const delay = index % 2 === 0 ? 0 : -cycle / 2;
 
       star.style.setProperty("--from-x", startX);
       star.style.setProperty("--from-y", startY);
-      star.style.setProperty("--dx", `${dxVal}vw`);
-      star.style.setProperty("--dy", `${dyVal}vh`);
+      star.style.setProperty("--to-x", endX);
+      star.style.setProperty("--to-y", endY);
       star.style.setProperty("--angle", `${angle}deg`);
-      star.style.setProperty("--duration", `${duration}s`);
+      star.style.setProperty("--cycle", `${cycle}s`);
       star.style.setProperty("--delay", `${delay}s`);
-      star.style.setProperty("--scale", `${0.85 + Math.random() * 0.35}`);
-    }
-
-    function seedStars(count = 12) {
-      const stars = Array.from(document.querySelectorAll(".star"));
-      const needed = count - stars.length;
-      for (let i = 0; i < needed; i++) {
-        const node = document.createElement("div");
-        node.className = "star";
-        document.body.appendChild(node);
-        stars.push(node);
-      }
-
-      stars.forEach((star) => {
-        randomizeStar(star);
-        star.addEventListener("animationiteration", () => randomizeStar(star));
-      });
+      star.style.setProperty("--scale", `${0.85 + Math.random() * 0.2}`);
     }
 
     function initCloudMotion() {
@@ -1946,7 +1932,11 @@ color: rgba(245,250,255,.96) !important;
     }
 
     document.addEventListener("DOMContentLoaded", () => {
-      seedStars(14);
+      const stars = Array.from(document.querySelectorAll(".star"));
+      stars.forEach((star, index) => {
+        randomizeStar(star, index);
+        star.addEventListener("animationiteration", () => randomizeStar(star, index));
+      });
       initCloudMotion();
     });
   </script>
