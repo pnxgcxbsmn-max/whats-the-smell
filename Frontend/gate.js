@@ -18,12 +18,12 @@ if (typeof GATEWAY === "undefined") {
 
 console.log("%c[GATE] Initialized with GATEWAY v" + GATEWAY.VERSION + " | Status: " + (GATEWAY.CONFIG.enabled ? "ACTIVE" : "DISABLED"), "color: cyan; font-size: 14px; font-weight: bold;");
 
-const ACCESS_TOKEN_KEY = "beta_access_token";
+const ACCESS_TOKEN_KEY = GATEWAY.CONFIG.token_key;
 const GENERATION_LIMIT = 10;
 const LIMIT_WINDOW = 24 * 60 * 60 * 1000;
 
 let accessGranted = false;
-const ACCESS_GRANTED_KEY = "beta_access_granted";
+const ACCESS_GRANTED_KEY = GATEWAY.CONFIG.granted_key;
 
 let currentAccessGateLang = localStorage.getItem("accessGateLang") || "en";
 
