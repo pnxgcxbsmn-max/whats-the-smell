@@ -45,45 +45,50 @@ const TRANSLATIONS = {
 };
 
 /**
- * Inicializa la puerta de acceso - DISABLED
+ * Inicializa la puerta de acceso
  */
 function initAccessGate() {
-  // Hard reset: clear all tokens
-  localStorage.removeItem(ACCESS_TOKEN_KEY);
-  localStorage.removeItem(ACCESS_GRANTED_KEY);
-  
-  console.log("%c[GATE] Hard reset applied - all tokens cleared", "color: orange; font-size: 12px;");
+  console.log("%c[GATE] Initializing gate check", "color: cyan; font-size: 12px;");
   
   if (hasValidAccess()) {
-    console.log("%c[GATE] Valid token found", "color: lime; font-size: 12px;");
+    console.log("%c[GATE] ✓ Valid token found (24h expiry) - entering site", "color: lime; font-size: 12px;");
     showMainSite();
   } else {
-    console.log("%c[GATE] No valid token - showing gate", "color: cyan; font-size: 12px;");
+    console.log("%c[GATE] ✗ No valid token - requiring password", "color: orange; font-size: 12px;");
     showAccessGate();
   }
 }
 
-  // Mostrar puerta de acceso
-  showAccessGate();
-}
-
 /**
- * Verifica si el usuario tiene acceso válido
+ * Verifica si el usuario tiene acceso válido (24h)
  */
 function hasValidAccess() {
   const token = localStorage.getItem(ACCESS_TOKEN_KEY);
-  if (!token) return false;
-
-  const tokenData = JSON.parse(token);
-  const now = Date.now();
-
-  // Validar que el token no haya expirado (7 días)
-  if (now - tokenData.timestamp > 7 * 24 * 60 * 60 * 1000) {
-    localStorage.removeItem(ACCESS_TOKEN_KEY);
+  if (!token) {
+    console.log("%c[GATE] No token found", "color: red; font-size: 10px;");
     return false;
   }
 
-  return true;
+  try {
+    const tokenData = JSON.parse(token);
+    const now = Date.now();
+    const age = now - tokenData.timestamp;
+    const ONE_DAY = 24 * 60 * 60 * 1000;
+
+    if (age > ONE_DAY) {
+      console.log("%c[GATE] Token expired (>24h)", "color: red; font-size: 10px;");
+      localStorage.removeItem(ACCESS_TOKEN_KEY);
+      localStorage.removeItem(ACCESS_GRANTED_KEY);
+      return false;
+    }
+    
+    console.log("%c[GATE] Token valid (" + Math.floor(age / 60000) + "m old)", "color: lime; font-size: 10px;");
+    return true;
+  } catch (e) {
+    console.error("%c[GATE] Token parse error", "color: red; font-size: 10px;", e);
+    localStorage.removeItem(ACCESS_TOKEN_KEY);
+    return false;
+  }
 }
 
 /**
@@ -284,13 +289,14 @@ async function handleAccessSubmit(e) {
   showWelcomeMessage();
   await new Promise((resolve) => setTimeout(resolve, 3500));
 
-  // Guardar acceso
+  // Guardar acceso (24h token)
   const token = {
     timestamp: Date.now(),
     generations: 0,
   };
   localStorage.setItem(ACCESS_TOKEN_KEY, JSON.stringify(token));
   localStorage.setItem(ACCESS_GRANTED_KEY, "true");
+  console.log("%c[GATE] ✓ Access granted - token saved (24h)", "color: lime; font-size: 12px;");
   
   // Marcar acceso como otorgado para evitar reiniciar el gate
   accessGranted = true;
