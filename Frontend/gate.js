@@ -3,14 +3,14 @@
  * Gate access has been completely disabled
  */
 
-const GATE_VERSION = "2026-02-03-disabled";
+const GATE_VERSION = "2026-02-05-active";
 
-// ===== GATE DISABLED =====
-// Always bypass the gate and show the main site
-const SHOULD_SKIP_GATE = true;
+// ===== GATE ACTIVE =====
+// Password required: "NoseKnows"
+const SHOULD_SKIP_GATE = false;
 
 // Debug
-console.log("%c[GATE] DISABLED - Gate access is completely bypassed", "color: red; font-size: 16px; font-weight: bold;");
+console.log("%c[GATE] ACTIVE - Beta access gate enabled", "color: cyan; font-size: 16px; font-weight: bold;");
 
 const ACCESS_TOKEN_KEY = "beta_access_token";
 const GENERATION_LIMIT = 10;
