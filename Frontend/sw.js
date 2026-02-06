@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v8-20260205-gateway-module";
+const CACHE_VERSION = "v9-20260206-gateway-module";
 const CACHE_NAME = `wts-cache-${CACHE_VERSION}`;
 const CRITICAL_ASSETS = [
   "/",
