@@ -1,17 +1,22 @@
 /**
- * Early Access Gate (Beta) - DISABLED
- * Gate access has been completely disabled
+ * Early Access Gate (Beta) - Uses GATEWAY module
+ * 
+ * GATEWAY module (gateway.js) is the single source of truth for:
+ * - Gate enabled/disabled status
+ * - Password
+ * - Token validation & storage
+ * - Token duration
+ * 
+ * This file (gate.js) only handles UI and initialization.
  */
 
-const GATE_VERSION = "2026-02-05-active";
+// Ensure GATEWAY module is loaded
+if (typeof GATEWAY === "undefined") {
+  console.error("[GATE] GATEWAY module not loaded. Ensure gateway.js is loaded before gate.js");
+  throw new Error("GATEWAY module required");
+}
 
-// ===== GATE ACTIVE =====
-// Password required: "reymono95"
-const SHOULD_SKIP_GATE = false;
-const BETA_PASSWORD = "reymono95";
-
-// Debug
-console.log("%c[GATE] ACTIVE - Beta access gate enabled", "color: cyan; font-size: 16px; font-weight: bold;");
+console.log("%c[GATE] Initialized with GATEWAY v" + GATEWAY.VERSION + " | Status: " + (GATEWAY.CONFIG.enabled ? "ACTIVE" : "DISABLED"), "color: cyan; font-size: 14px; font-weight: bold;");
 
 const ACCESS_TOKEN_KEY = "beta_access_token";
 const GENERATION_LIMIT = 10;
@@ -51,8 +56,14 @@ const TRANSLATIONS = {
 function initAccessGate() {
   console.log("%c[GATE] Initializing gate check", "color: cyan; font-size: 12px;");
   
-  if (hasValidAccess()) {
-    console.log("%c[GATE] ✓ Valid token found (24h expiry) - entering site", "color: lime; font-size: 12px;");
+  if (!GATEWAY.CONFIG.enabled) {
+    console.log("%c[GATE] Gate disabled - bypassing\", \"color: orange; font-size: 12px;\");
+    showMainSite();
+    return;
+  }
+
+  if (GATEWAY.hasValidToken()) {
+    console.log("%c[GATE] ✓ Valid token found - entering site", "color: lime; font-size: 12px;");
     showMainSite();
   } else {
     console.log("%c[GATE] ✗ No valid token - requiring password", "color: orange; font-size: 12px;");
@@ -61,35 +72,10 @@ function initAccessGate() {
 }
 
 /**
- * Verifica si el usuario tiene acceso válido (24h)
+ * Verifica si el usuario tiene acceso válido (via GATEWAY)
  */
 function hasValidAccess() {
-  const token = localStorage.getItem(ACCESS_TOKEN_KEY);
-  if (!token) {
-    console.log("%c[GATE] No token found", "color: red; font-size: 10px;");
-    return false;
-  }
-
-  try {
-    const tokenData = JSON.parse(token);
-    const now = Date.now();
-    const age = now - tokenData.timestamp;
-    const ONE_DAY = 24 * 60 * 60 * 1000;
-
-    if (age > ONE_DAY) {
-      console.log("%c[GATE] Token expired (>24h)", "color: red; font-size: 10px;");
-      localStorage.removeItem(ACCESS_TOKEN_KEY);
-      localStorage.removeItem(ACCESS_GRANTED_KEY);
-      return false;
-    }
-    
-    console.log("%c[GATE] Token valid (" + Math.floor(age / 60000) + "m old)", "color: lime; font-size: 10px;");
-    return true;
-  } catch (e) {
-    console.error("%c[GATE] Token parse error", "color: red; font-size: 10px;", e);
-    localStorage.removeItem(ACCESS_TOKEN_KEY);
-    return false;
-  }
+  return GATEWAY.hasValidToken();
 }
 
 /**
@@ -265,7 +251,7 @@ async function handleAccessSubmit(e) {
   errorDiv.style.display = "none";
 
   // Validar
-  if (password !== BETA_PASSWORD) {
+  if (password !== GATEWAY.CONFIG.password) {
     console.log("%c[GATE] \u2717 Password incorrect", "color: red; font-size: 11px;");
     errorDiv.textContent = t.error;
     errorDiv.style.display = "block";
@@ -291,14 +277,9 @@ async function handleAccessSubmit(e) {
   showWelcomeMessage();
   await new Promise((resolve) => setTimeout(resolve, 3500));
 
-  // Guardar acceso (24h token)
-  const token = {
-    timestamp: Date.now(),
-    generations: 0,
-  };
-  localStorage.setItem(ACCESS_TOKEN_KEY, JSON.stringify(token));
-  localStorage.setItem(ACCESS_GRANTED_KEY, "true");
-  console.log("%c[GATE] ✓ Access granted - token saved (24h)", "color: lime; font-size: 12px;");
+  // Guardar acceso (via GATEWAY)
+  GATEWAY.grantAccess();
+  console.log("%c[GATE] ✓ Access granted - token saved", "color: lime; font-size: 12px;");
   
   // Marcar acceso como otorgado para evitar reiniciar el gate
   accessGranted = true;

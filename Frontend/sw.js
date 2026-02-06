@@ -1,12 +1,23 @@
-const CACHE_VERSION = "v7-20260204-carousel-fix";
+const CACHE_VERSION = "v8-20260205-gateway-module";
 const CACHE_NAME = `wts-cache-${CACHE_VERSION}`;
 const CRITICAL_ASSETS = [
   "/",
   "/index.html",
+  "/gateway.js",
   "/app.js",
+  "/gate.js",
   "/access-gate.js",
   "/manifest.json",
   "/assets/brand/logo-en.png",
+];
+
+// Network-first files (always check server first)
+const NETWORK_FIRST_FILES = [
+  "/gateway.js",
+  "/app.js",
+  "/gate.js",
+  "/access-gate.js",
+  "/index.html",
 ];
 
 // Pre-cache critical assets on install
@@ -49,8 +60,32 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  const pathname = url.pathname;
+  const isNetworkFirst = NETWORK_FIRST_FILES.some(file => pathname === file || pathname.endsWith(file));
+
+  // STRATEGY 0: Network-first for gateway/gate/app files (always fresh)
+  if (isNetworkFirst) {
+    event.respondWith(
+      fetch(request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const responseToCache = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(request, responseToCache);
+            });
+          }
+          return networkResponse;
+        })
+        .catch(() => {
+          // Fallback to cache if network fails
+          return caches.match(request) || new Response("Offline", { status: 503 });
+        })
+    );
+    return;
+  }
+
   // STRATEGY 1: Images - Cache first, fallback to network
-  if (/\.(webp|png|jpg|jpeg|gif|svg)$/i.test(url.pathname)) {
+  if (/\.(webp|png|jpg|jpeg|gif|svg)$/i.test(pathname)) {
     event.respondWith(
       caches.match(request).then((response) => {
         return (
@@ -69,7 +104,7 @@ self.addEventListener("fetch", (event) => {
     );
   }
   // STRATEGY 2: API calls - Network first, fallback to cache
-  else if (url.pathname.startsWith("/api/")) {
+  else if (pathname.startsWith("/api/")) {
     event.respondWith(
       fetch(request)
         .then((networkResponse) => {
@@ -86,7 +121,7 @@ self.addEventListener("fetch", (event) => {
         })
     );
   }
-  // STRATEGY 3: HTML/JS/CSS - Network first for fresh content
+  // STRATEGY 3: Other HTML/JS/CSS - Network first for fresh content
   else {
     event.respondWith(
       fetch(request)

@@ -1960,7 +1960,11 @@ color: rgba(245,250,255,.96) !important;
       caches.keys().then((keys) => keys.forEach((k) => caches.delete(k)));
     }
   </script>
+  <!-- Gateway module: defines GATEWAY global (must load first) -->
+  <script src="gateway.js?v=20260205"></script>
+  <!-- Gate UI: uses GATEWAY module -->
   <script src="gate.js?v=20260205"></script>
+  <!-- Main app: uses GATEWAY module -->
   <script src="app.js?v=20260205" defer></script>
   <script>
     const ENABLE_SW = false; // disable SW to avoid stale assets during debug

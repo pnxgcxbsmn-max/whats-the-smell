@@ -6,23 +6,15 @@
 
   console.log("%c[APP] update 9:15 PM 2.5.26 | Gate: 24h active", "color: lime; font-size: 14px; font-weight: bold;");
 
-  // ===== API base (works for localhost:3000 + prod) =====
-  const API = (() => {
-    const forced = String(window.WTS_API_BASE || "").trim().replace(/\/+$/, "");
-    if (forced) return forced;
+  // ===== Use GATEWAY module for API resolution =====
+  // GATEWAY is defined in gateway.js (loaded before app.js)
+  if (typeof GATEWAY === "undefined") {
+    console.error("[APP] GATEWAY module not loaded. Ensure gateway.js is loaded before app.js");
+    return;
+  }
 
-    const isLocal3000 =
-      window.location.hostname === "localhost" &&
-      window.location.port === "3000";
-
-    if (isLocal3000) return "http://localhost:5051";
-    
-    // Production: use Railway API
-    const isProduction = window.location.hostname !== "localhost";
-    if (isProduction) return "https://whats-the-smell-production.up.railway.app";
-    
-    return window.location.origin.replace(/\/+$/, "");
-  })();
+  const API = GATEWAY.apiBase;
+  console.log("%c[APP] API endpoint: " + API + " | Environment: " + GATEWAY.env, "color: cyan; font-size: 11px;");
 
   // ===== DOM =====
   const el = {
