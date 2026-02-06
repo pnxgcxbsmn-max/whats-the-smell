@@ -163,6 +163,11 @@
       const styles = document.getElementById("access-gate-styles");
       if (styles) styles.remove();
       document.body.style.overflow = "auto";
+      // Trigger app boot in a safe, deterministic way
+      try {
+        window.dispatchEvent(new Event("wts:boot"));
+      } catch {}
+
       if (typeof window.initializeApp === "function") {
         window.initializeApp();
       }

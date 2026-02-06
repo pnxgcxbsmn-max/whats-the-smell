@@ -1644,6 +1644,8 @@ function updateCarouselFocus() {
 
   // ===== Boot =====
   function boot() {
+    if (window.__WTS_BOOTED) return;
+    window.__WTS_BOOTED = true;
     console.log("[Boot] Application starting...");
     // Set default language to English on first load
     if (!el.langSelect.value) {
@@ -1745,6 +1747,12 @@ function updateCarouselFocus() {
       boot();
     }
   }
+
+  // Allow access-gate to trigger boot explicitly
+  window.addEventListener("wts:boot", () => {
+    if (document.querySelector(".access-gate-container")) return;
+    boot();
+  });
 })();
 
 
