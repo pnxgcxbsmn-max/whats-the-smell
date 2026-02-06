@@ -48,16 +48,20 @@ const TRANSLATIONS = {
  * Inicializa la puerta de acceso - DISABLED
  */
 function initAccessGate() {
-  console.log("%c[GATE] Bypassing access gate (disabled)", "color: lime; font-size: 12px;");
-  accessGranted = true;
-  localStorage.setItem(ACCESS_GRANTED_KEY, "true");
-  showMainSite();
-  return;
-    accessGranted = true;
-    localStorage.setItem(ACCESS_GRANTED_KEY, "true");
+  // Hard reset: clear all tokens
+  localStorage.removeItem(ACCESS_TOKEN_KEY);
+  localStorage.removeItem(ACCESS_GRANTED_KEY);
+  
+  console.log("%c[GATE] Hard reset applied - all tokens cleared", "color: orange; font-size: 12px;");
+  
+  if (hasValidAccess()) {
+    console.log("%c[GATE] Valid token found", "color: lime; font-size: 12px;");
     showMainSite();
-    return;
+  } else {
+    console.log("%c[GATE] No valid token - showing gate", "color: cyan; font-size: 12px;");
+    showAccessGate();
   }
+}
 
   // Mostrar puerta de acceso
   showAccessGate();
