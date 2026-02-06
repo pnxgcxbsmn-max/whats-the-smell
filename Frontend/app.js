@@ -4,7 +4,7 @@
   // Robust bindings: language + category + generate
   // =========================
 
-  console.log("%c[APP] update 9:05 PM 2.5.26", "color: lime; font-size: 14px; font-weight: bold;");
+  console.log("%c[APP] update 9:15 PM 2.5.26 | Gate: 24h active", "color: lime; font-size: 14px; font-weight: bold;");
 
   // ===== API base (works for localhost:3000 + prod) =====
   const API = (() => {
