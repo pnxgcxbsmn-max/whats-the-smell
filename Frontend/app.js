@@ -4,7 +4,7 @@
   // Robust bindings: language + category + generate
   // =========================
 
-  console.log("%c[APP] LOADED - Version 2026-02-04-v3 console-marker", "color: lime; font-size: 14px; font-weight: bold;");
+  console.log("%c[APP] update 9:05 PM 2.5.26", "color: lime; font-size: 14px; font-weight: bold;");
 
   // ===== API base (works for localhost:3000 + prod) =====
   const API = (() => {
