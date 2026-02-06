@@ -42,9 +42,8 @@ self.addEventListener("activate", (event) => {
           }
         })
       );
-    })
+    }).then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
 // OPTIMIZATION: Intelligent caching strategy
@@ -138,3 +137,8 @@ self.addEventListener("fetch", (event) => {
     );
   }
 });
+
+// Changes (2026-02-06):
+// - CACHE_VERSION remains explicit for predictable cache busting.
+// - activate now deletes old caches and claims clients within waitUntil for immediate control.
+// - skipWaiting is already used on install to activate new SW without user refresh.
