@@ -10,13 +10,39 @@
  * This file (gate.js) only handles UI and initialization.
  */
 
-// Ensure GATEWAY module is loaded
-if (typeof GATEWAY === "undefined") {
-  console.error("[GATE] GATEWAY module not loaded. Ensure gateway.js is loaded before gate.js");
-  throw new Error("GATEWAY module required");
+// Safe defaults: if GATEWAY not loaded, define minimal config
+const GATEWAY = (typeof GATEWAY !== "undefined") ? GATEWAY : (() => {
+  console.warn("%c[GATE] GATEWAY module not available - using safe defaults", "color: orange; font-size: 12px;");
+  return {
+    VERSION: "fallback",
+    CONFIG: {
+      enabled: false,
+      password: "",
+      token_key: "beta_access_token",
+      granted_key: "beta_access_granted",
+    },
+    hasValidToken: () => false,
+    grantAccess: () => {
+      localStorage.setItem("beta_access_token", JSON.stringify({ timestamp: Date.now() }));
+      localStorage.setItem("beta_access_granted", "true");
+    },
+    clearAccess: () => {
+      localStorage.removeItem("beta_access_token");
+      localStorage.removeItem("beta_access_granted");
+    },
+  };
+})();
+
+// Safe password fallback
+const BETA_PASSWORD = String(window.WTS_BETA_PASSWORD || GATEWAY.CONFIG.password || "").trim();
+const BETA_ACCESS_SUBMIT = "BETA_ACCESS_SUBMIT";
+
+// Warn if password is empty
+if (!BETA_PASSWORD) {
+  console.warn("%c[GATE] ⚠ BETA_PASSWORD is empty - gate will reject all passwords", "color: red; font-size: 12px; font-weight: bold;");
 }
 
-console.log("%c[GATE] Initialized with GATEWAY v" + GATEWAY.VERSION + " | Status: " + (GATEWAY.CONFIG.enabled ? "ACTIVE" : "DISABLED"), "color: cyan; font-size: 14px; font-weight: bold;");
+console.log("%c[GATE] Initialized | v=" + GATEWAY.VERSION + " | Enabled=" + GATEWAY.CONFIG.enabled + " | Password=" + (BETA_PASSWORD ? "SET" : "EMPTY"), "color: cyan; font-size: 14px; font-weight: bold;");
 
 const ACCESS_TOKEN_KEY = GATEWAY.CONFIG.token_key;
 const GENERATION_LIMIT = 10;
@@ -241,6 +267,15 @@ function handleLanguageSwitch(lang) {
 async function handleAccessSubmit(e) {
   e.preventDefault();
 
+  if (!BETA_PASSWORD) {
+    const errorDiv = document.getElementById("accessGateError");
+    const t = TRANSLATIONS[currentAccessGateLang];
+    console.error("%c[GATE] Password not configured - cannot authenticate", "color: red; font-size: 11px;");
+    errorDiv.textContent = "Sistema no configurado. Contacta al administrador.";
+    errorDiv.style.display = "block";
+    return;
+  }
+
   const input = document.getElementById("accessGateInput");
   const button = e.target.querySelector(".access-gate-submit");
   const errorDiv = document.getElementById("accessGateError");
@@ -251,7 +286,7 @@ async function handleAccessSubmit(e) {
   errorDiv.style.display = "none";
 
   // Validar
-  if (password !== GATEWAY.CONFIG.password) {
+  if (password !== BETA_PASSWORD) {
     console.log("%c[GATE] \u2717 Password incorrect", "color: red; font-size: 11px;");
     errorDiv.textContent = t.error;
     errorDiv.style.display = "block";
