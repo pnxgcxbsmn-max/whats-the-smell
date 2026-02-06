@@ -1,0 +1,20 @@
+/index.html
+  Cache-Control: no-store, max-age=0
+
+/app.js
+  Cache-Control: no-store, max-age=0
+
+/gateway.js
+  Cache-Control: no-store, max-age=0
+
+/access-gate.js
+  Cache-Control: no-store, max-age=0
+
+/sw.js
+  Cache-Control: no-store, max-age=0
+
+/manifest.json
+  Cache-Control: no-store, max-age=0
+
+/manifest.webmanifest
+  Cache-Control: no-store, max-age=0
