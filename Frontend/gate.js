@@ -266,6 +266,7 @@ async function handleAccessSubmit(e) {
 
   // Validar
   if (password !== BETA_PASSWORD) {
+    console.log("%c[GATE] \u2717 Password incorrect", "color: red; font-size: 11px;");
     errorDiv.textContent = t.error;
     errorDiv.style.display = "block";
     input.value = "";
