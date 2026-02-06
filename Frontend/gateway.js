@@ -10,7 +10,7 @@
 
 const GATEWAY = (() => {
   // ===== VERSION (increment to force cache busting) =====
-  const VERSION = "2026-02-05-v2";
+  const VERSION = "2026-02-06-v3";
   
   // ===== GATE CONFIGURATION =====
   const GATE_CONFIG = {

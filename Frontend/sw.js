@@ -1,11 +1,10 @@
-const CACHE_VERSION = "v9-20260206-gateway-module";
+const CACHE_VERSION = "v11-20260206-access-gate";
 const CACHE_NAME = `wts-cache-${CACHE_VERSION}`;
 const CRITICAL_ASSETS = [
   "/",
   "/index.html",
   "/gateway.js",
   "/app.js",
-  "/gate.js",
   "/access-gate.js",
   "/manifest.json",
   "/assets/brand/logo-en.png",
@@ -15,7 +14,6 @@ const CRITICAL_ASSETS = [
 const NETWORK_FIRST_FILES = [
   "/gateway.js",
   "/app.js",
-  "/gate.js",
   "/access-gate.js",
   "/index.html",
 ];
