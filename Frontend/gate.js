@@ -83,7 +83,7 @@ function initAccessGate() {
   console.log("%c[GATE] Initializing gate check", "color: cyan; font-size: 12px;");
   
   if (!GATEWAY.CONFIG.enabled) {
-    console.log("%c[GATE] Gate disabled - bypassing\", \"color: orange; font-size: 12px;\");
+    console.log("%c[GATE] Gate disabled - bypassing", "color: orange; font-size: 12px;");
     showMainSite();
     return;
   }
@@ -183,42 +183,40 @@ function showAccessGate() {
 
   // Insertar en el body (antes del main o al inicio del body)
   const main = document.querySelector("main") || document.querySelector(".grid");
-  const insertPoint = main || document.body;
   const container = document.createElement("div");
   container.innerHTML = gateHTML;
   
   if (main) {
-    main.parentNode.insertBefore(container, main);
+    main.parentNode.insertBefore(container.firstElementChild, main);
   } else {
-    document.body.insertBefore(container, document.body.firstChild);
+    document.body.insertBefore(container.firstElementChild, document.body.firstChild);
   }
 
   // Agregar estilos
   addAccessGateStyles();
 
-  // Event listeners
+  // Event listeners (query after DOM insertion)
   const form = document.getElementById("accessGateForm");
   const input = document.getElementById("accessGateInput");
 
+  if (!form) {
+    console.error("%c[GATE] Form element not found after DOM insertion", "color: red; font-size: 11px;");
+    return;
+  }
+
   form.addEventListener("submit", handleAccessSubmit);
-  // IMPORTANT:
-  // Do NOT call native form.submit() on Enter. It bypasses the submit
-  // event handler (handleAccessSubmit), which can cause a full page reload
-  // and an infinite "back to gate" loop (especially when Chrome password
-  // manager/autofill interacts with the form).
-  // Default form behavior already submits on Enter, so we simply prevent
-  // propagation here to avoid duplicate submits.
-  input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
-      // Let the form submit event fire normally.
-      // If a browser doesn't submit by default, requestSubmit() does and
-      // will still trigger our submit handler.
-      if (typeof form.requestSubmit === "function") {
-        e.preventDefault();
-        form.requestSubmit();
+  
+  // KeyDown listener for Enter key (null-safe)
+  if (input) {
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        if (typeof form.requestSubmit === "function") {
+          e.preventDefault();
+          form.requestSubmit();
+        }
       }
-    }
-  });
+    });
+  }
 
   // Language switch listeners
   document.querySelectorAll(".lang-btn").forEach(btn => {
@@ -229,13 +227,19 @@ function showAccessGate() {
   });
 
   // Focus automático
-  input.focus();
-}
+  if (input) {
+    input.focus();
+  }
 
 /**
  * Maneja el cambio de idioma
  */
 function handleLanguageSwitch(lang) {
+  if (!lang || typeof lang !== "string") {
+    console.warn("%c[GATE] Invalid language:", "color: orange; font-size: 10px;", lang);
+    return;
+  }
+
   currentAccessGateLang = lang;
   localStorage.setItem("accessGateLang", lang);
   
@@ -245,17 +249,29 @@ function handleLanguageSwitch(lang) {
   });
 
   const t = TRANSLATIONS[lang];
-  const container = document.getElementById("accessGateContainer");
+  if (!t) {
+    console.warn("%c[GATE] Translation not found for language:", "color: orange; font-size: 10px;", lang);
+    return;
+  }
 
-  if (container) {
-    // Actualizar textos
-    document.querySelector(".access-gate-title").textContent = t.title;
-    document.querySelector(".access-gate-subtitle").textContent = t.subtitle;
-    document.getElementById("accessGateInput").placeholder = t.placeholder;
-    document.querySelector(".submit-text").textContent = t.access;
-    document.getElementById("accessGateError").textContent = t.error;
+  const container = document.getElementById("accessGateContainer");
+  if (!container) return;
+
+  // Actualizar textos con null-checks
+  const title = document.querySelector(".access-gate-title");
+  const subtitle = document.querySelector(".access-gate-subtitle");
+  const gateInput = document.getElementById("accessGateInput");
+  const submitText = document.querySelector(".submit-text");
+  const errorElement = document.getElementById("accessGateError");
+
+  if (title) title.textContent = t.title;
+  if (subtitle) subtitle.textContent = t.subtitle;
+  if (gateInput) gateInput.placeholder = t.placeholder;
+  if (submitText) submitText.textContent = t.access;
+  if (errorElement) errorElement.textContent = t.error;
     
-    const descriptions = document.querySelectorAll(".access-gate-description p");
+  const descriptions = document.querySelectorAll(".access-gate-description p");
+  if (descriptions.length >= 2) {
     descriptions[0].textContent = t.thanks;
     descriptions[1].textContent = t.limited;
   }
@@ -265,68 +281,90 @@ function handleLanguageSwitch(lang) {
  * Maneja el envío de la contraseña
  */
 async function handleAccessSubmit(e) {
-  e.preventDefault();
+  try {
+    e.preventDefault();
 
-  if (!BETA_PASSWORD) {
+    if (!BETA_PASSWORD) {
+      const errorDiv = document.getElementById("accessGateError");
+      const t = TRANSLATIONS[currentAccessGateLang];
+      console.error("%c[GATE] Password not configured - cannot authenticate", "color: red; font-size: 11px;");
+      errorDiv.textContent = "Sistema no configurado. Contacta al administrador.";
+      errorDiv.style.display = "block";
+      return;
+    }
+
+    const input = document.getElementById("accessGateInput");
+    const button = e.target.querySelector("button[type='submit']");
     const errorDiv = document.getElementById("accessGateError");
+    const password = input ? input.value.trim() : "";
     const t = TRANSLATIONS[currentAccessGateLang];
-    console.error("%c[GATE] Password not configured - cannot authenticate", "color: red; font-size: 11px;");
-    errorDiv.textContent = "Sistema no configurado. Contacta al administrador.";
-    errorDiv.style.display = "block";
-    return;
+
+    // Guard: check elements exist
+    if (!input || !button || !errorDiv) {
+      console.error("%c[GATE] Required DOM elements not found", "color: red; font-size: 11px;");
+      return;
+    }
+
+    // Limpiar error previo
+    errorDiv.style.display = "none";
+
+    // Validar
+    if (password !== BETA_PASSWORD) {
+      console.log("%c[GATE] ✗ Password incorrect", "color: red; font-size: 11px;");
+      errorDiv.textContent = t.error;
+      errorDiv.style.display = "block";
+      input.value = "";
+      input.focus();
+
+      // Shake animation
+      const box = document.querySelector(".access-gate-box");
+      if (box) {
+        box.classList.add("shake");
+        setTimeout(() => box.classList.remove("shake"), 500);
+      }
+      return;
+    }
+
+    // Mostrar loading
+    button.disabled = true;
+    const submitText = button.querySelector(".submit-text");
+    const submitLoading = button.querySelector(".submit-loading");
+    
+    if (submitText) submitText.style.display = "none";
+    if (submitLoading) submitLoading.style.display = "inline-flex";
+
+    // Animación de aroma
+    playAromaAnimation();
+
+    // Mostrar "Welcome" y esperar más tiempo (3.5 segundos para cargar)
+    showWelcomeMessage();
+    await new Promise((resolve) => setTimeout(resolve, 3500));
+
+    // Guardar acceso (via GATEWAY)
+    try {
+      GATEWAY.grantAccess();
+      console.log("%c[GATE] ✓ Access granted - token saved", "color: lime; font-size: 12px;");
+    } catch (e) {
+      console.error("%c[GATE] Error saving token:", "color: red; font-size: 11px;", e);
+      // Continue anyway - don't block the user
+    }
+    
+    // Marcar acceso como otorgado para evitar reiniciar el gate
+    accessGranted = true;
+
+    // Transición suave
+    const container = document.getElementById("accessGateContainer");
+    if (container) {
+      container.classList.add("fade-out");
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    // Mostrar sitio - prevenir eventos secundarios
+    showMainSite();
+  } catch (err) {
+    console.error("%c[GATE] Error in handleAccessSubmit:", "color: red; font-size: 11px;", err);
   }
-
-  const input = document.getElementById("accessGateInput");
-  const button = e.target.querySelector(".access-gate-submit");
-  const errorDiv = document.getElementById("accessGateError");
-  const password = input.value.trim();
-  const t = TRANSLATIONS[currentAccessGateLang];
-
-  // Limpiar error previo
-  errorDiv.style.display = "none";
-
-  // Validar
-  if (password !== BETA_PASSWORD) {
-    console.log("%c[GATE] \u2717 Password incorrect", "color: red; font-size: 11px;");
-    errorDiv.textContent = t.error;
-    errorDiv.style.display = "block";
-    input.value = "";
-    input.focus();
-
-    // Shake animation
-    const box = document.querySelector(".access-gate-box");
-    box.classList.add("shake");
-    setTimeout(() => box.classList.remove("shake"), 500);
-    return;
-  }
-
-  // Mostrar loading
-  button.disabled = true;
-  button.querySelector(".submit-text").style.display = "none";
-  button.querySelector(".submit-loading").style.display = "inline-flex";
-
-  // Animación de aroma
-  playAromaAnimation();
-
-  // Mostrar "Welcome" y esperar más tiempo (3.5 segundos para cargar)
-  showWelcomeMessage();
-  await new Promise((resolve) => setTimeout(resolve, 3500));
-
-  // Guardar acceso (via GATEWAY)
-  GATEWAY.grantAccess();
-  console.log("%c[GATE] ✓ Access granted - token saved", "color: lime; font-size: 12px;");
-  
-  // Marcar acceso como otorgado para evitar reiniciar el gate
-  accessGranted = true;
-
-  // Transición suave
-  const container = document.getElementById("accessGateContainer");
-  container.classList.add("fade-out");
-
-  await new Promise((resolve) => setTimeout(resolve, 1000));
-
-  // Mostrar sitio - prevenir eventos secundarios
-  showMainSite();
 }
 
 /**
@@ -336,6 +374,11 @@ function showWelcomeMessage() {
   const t = TRANSLATIONS[currentAccessGateLang];
   const container = document.getElementById("accessGateContainer");
   
+  if (!container) {
+    console.warn("%c[GATE] accessGateContainer not found for welcome message", "color: orange; font-size: 10px;");
+    return;
+  }
+
   // Crear overlay de bienvenida
   const welcomeOverlay = document.createElement("div");
   welcomeOverlay.className = "welcome-overlay";
@@ -349,6 +392,11 @@ function showWelcomeMessage() {
  */
 function playAromaAnimation() {
   const particles = document.getElementById("aromaParticles");
+  if (!particles) {
+    console.warn("%c[GATE] aromaParticles element not found", "color: orange; font-size: 10px;");
+    return;
+  }
+
   const particleCount = 20;
 
   for (let i = 0; i < particleCount; i++) {
@@ -372,18 +420,30 @@ function playAromaAnimation() {
  */
 function showMainSite() {
   try {
+    console.log("%c[GATE] Showing main site...", "color: cyan; font-size: 11px;");
+
     // Remover completamente el gate
     const container = document.getElementById("accessGateContainer");
     if (container) {
       container.style.display = "none";
-      setTimeout(() => container.remove(), 100);
+      setTimeout(() => {
+        try {
+          container.remove();
+        } catch (e) {
+          console.warn("%c[GATE] Error removing gate container", "color: orange; font-size: 10px;");
+        }
+      }, 100);
     }
 
     // Remover estilos inyectados por el gate
     const styles = document.querySelectorAll("style");
     styles.forEach((s) => {
-      if (s.textContent && s.textContent.includes("ACCESS GATE STYLES")) {
-        s.remove();
+      try {
+        if (s.textContent && s.textContent.includes("ACCESS GATE STYLES")) {
+          s.remove();
+        }
+      } catch (e) {
+        // Ignore individual style removal errors
       }
     });
 
@@ -392,39 +452,46 @@ function showMainSite() {
 
     // Mostrar elementos del sitio con pequeño delay para evitar race conditions
     setTimeout(() => {
-      const topbar = document.querySelector(".topbar");
-      const grid = document.querySelector(".grid");
-      const footer = document.querySelector(".studioFooter");
-      
-      if (topbar) {
-        topbar.style.display = "flex";
-        topbar.style.opacity = "0";
-        topbar.classList.add("fade-in");
-        void topbar.offsetHeight;
-        topbar.style.opacity = "1";
-      }
-      if (grid) {
-        grid.style.display = "grid";
-        grid.style.opacity = "0";
-        grid.classList.add("fade-in");
-        void grid.offsetHeight;
-        grid.style.opacity = "1";
-      }
-      if (footer) {
-        footer.style.display = "flex";
-        footer.style.opacity = "0";
-        footer.classList.add("fade-in");
-        void footer.offsetHeight;
-        footer.style.opacity = "1";
-      }
+      try {
+        const topbar = document.querySelector(".topbar");
+        const grid = document.querySelector(".grid");
+        const footer = document.querySelector(".studioFooter");
+        
+        if (topbar) {
+          topbar.style.display = "flex";
+          topbar.style.opacity = "0";
+          topbar.classList.add("fade-in");
+          void topbar.offsetHeight;
+          topbar.style.opacity = "1";
+        }
+        if (grid) {
+          grid.style.display = "grid";
+          grid.style.opacity = "0";
+          grid.classList.add("fade-in");
+          void grid.offsetHeight;
+          grid.style.opacity = "1";
+        }
+        if (footer) {
+          footer.style.display = "flex";
+          footer.style.opacity = "0";
+          footer.classList.add("fade-in");
+          void footer.offsetHeight;
+          footer.style.opacity = "1";
+        }
 
-      // Inicializar el sitio normalmente
-      if (typeof initializeApp === "function") {
-        initializeApp();
+        // Inicializar el sitio normalmente
+        if (typeof initializeApp === "function") {
+          initializeApp();
+          console.log("%c[GATE] App initialized", "color: lime; font-size: 11px;");
+        } else {
+          console.warn("%c[GATE] initializeApp not found - app may not work correctly", "color: orange; font-size: 10px;");
+        }
+      } catch (e) {
+        console.error("%c[GATE] Error showing main site elements:", "color: red; font-size: 11px;", e);
       }
     }, 120);
   } catch (err) {
-    console.error("Error en showMainSite:", err);
+    console.error("%c[GATE] Critical error in showMainSite:", "color: red; font-size: 11px; font-weight: bold;", err);
   }
 }
 
