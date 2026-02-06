@@ -939,21 +939,21 @@
 
     @keyframes fallingStar {
       0% {
-        transform: translate3d(var(--from-x, -10vw), var(--from-y, -20vh), 0) rotate(var(--angle, 0deg)) scale(var(--scale, 1));
+        transform: translate3d(var(--from-x, -18vw), var(--from-y, -28vh), 0) rotate(var(--angle, 0deg)) scale(var(--scale, 1));
         opacity: 0;
       }
       10% {
         opacity: 0;
       }
       16% {
-        opacity: 0.9;
+        opacity: var(--star-alpha, 0.6);
       }
-      30% {
-        transform: translate3d(var(--to-x, 60vw), var(--to-y, 120vh), 0) rotate(var(--angle, 0deg)) scale(var(--scale, 1));
+      32% {
+        transform: translate3d(var(--to-x, 55vw), var(--to-y, 70vh), 0) rotate(var(--angle, 0deg)) scale(var(--scale, 1));
         opacity: 0;
       }
       100% {
-        transform: translate3d(var(--to-x, 60vw), var(--to-y, 120vh), 0) rotate(var(--angle, 0deg)) scale(var(--scale, 1));
+        transform: translate3d(var(--to-x, 55vw), var(--to-y, 70vh), 0) rotate(var(--angle, 0deg)) scale(var(--scale, 1));
         opacity: 0;
       }
     }
@@ -966,9 +966,9 @@
       border-radius: 999px;
       pointer-events: none;
       z-index: 0;
-      filter: drop-shadow(0 0 6px rgba(255,255,255,0.35));
+      filter: drop-shadow(0 0 4px rgba(255,255,255,0.25));
       transform: translate3d(var(--from-x, -10vw), var(--from-y, -20vh), 0) rotate(var(--angle, 0deg)) scale(var(--scale, 1));
-      animation: fallingStar var(--cycle, 18s) linear infinite;
+      animation: fallingStar var(--cycle, 30s) linear infinite;
       animation-delay: var(--delay, 0s);
       opacity: 0;
       mix-blend-mode: screen;
@@ -980,10 +980,10 @@
       position: absolute;
       right: 100%;
       top: 50%;
-      width: clamp(80px, 14vw, 180px);
+      width: var(--trail, clamp(60px, 10vw, 120px));
       height: 1px;
       background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,0.7), rgba(255,255,255,0));
-      opacity: 0.6;
+      opacity: var(--trail-alpha, 0.45);
       transform: translateY(-50%);
       filter: blur(0.8px);
       pointer-events: none;
@@ -992,7 +992,7 @@
     .cloud-layer{
       position: fixed;
       inset: 0;
-      z-index: 0;
+      z-index: 1;
       pointer-events: none;
       background:
         radial-gradient(80% 50% at 20% 30%, rgba(255,255,255,0.08), transparent 55%),
@@ -1903,26 +1903,36 @@ color: rgba(245,250,255,.96) !important;
   </div>
 
   <script>
-    function randomizeStar(star, index) {
-      const dir = index % 2 === 0 ? 1 : -1;
-      const startY = `${-10 - Math.random() * 30}vh`;
-      const endY = `${110 + Math.random() * 25}vh`;
+    function randomizeStar(star) {
+      const startX = -25 + Math.random() * 12;
+      const startY = -35 + Math.random() * 14;
+      const travel = 45 + Math.random() * 25;
+      const slope = 0.9 + Math.random() * 0.12;
 
-      const startX = dir === 1 ? `${-20 - Math.random() * 20}vw` : `${100 + Math.random() * 20}vw`;
-      const endX = dir === 1 ? `${55 + Math.random() * 25}vw` : `${45 - Math.random() * 25}vw`;
+      const endX = Math.min(startX + travel, 70);
+      const endY = Math.min(startY + travel * slope, 80);
 
-      const angle = Math.atan2(parseFloat(endY) - parseFloat(startY), parseFloat(endX) - parseFloat(startX)) * 180 / Math.PI;
-      const cycle = 18;
-      const delay = index % 2 === 0 ? 0 : -cycle / 2;
+      const angle = Math.atan2(endY - startY, endX - startX) * 180 / Math.PI;
+      const cycle = 28 + Math.random() * 10;
+      const delay = -Math.random() * cycle;
 
-      star.style.setProperty("--from-x", startX);
-      star.style.setProperty("--from-y", startY);
-      star.style.setProperty("--to-x", endX);
-      star.style.setProperty("--to-y", endY);
+      const depth = Math.random();
+      const scale = 0.55 + depth * 0.35;
+      const alpha = 0.35 + depth * 0.35;
+      const trail = 50 + depth * 70;
+      const trailAlpha = 0.25 + depth * 0.3;
+
+      star.style.setProperty("--from-x", `${startX}vw`);
+      star.style.setProperty("--from-y", `${startY}vh`);
+      star.style.setProperty("--to-x", `${endX}vw`);
+      star.style.setProperty("--to-y", `${endY}vh`);
       star.style.setProperty("--angle", `${angle}deg`);
       star.style.setProperty("--cycle", `${cycle}s`);
       star.style.setProperty("--delay", `${delay}s`);
-      star.style.setProperty("--scale", `${0.85 + Math.random() * 0.2}`);
+      star.style.setProperty("--scale", `${scale}`);
+      star.style.setProperty("--star-alpha", `${alpha}`);
+      star.style.setProperty("--trail", `${trail}px`);
+      star.style.setProperty("--trail-alpha", `${trailAlpha}`);
     }
 
     function initCloudMotion() {
@@ -1933,9 +1943,9 @@ color: rgba(245,250,255,.96) !important;
 
     document.addEventListener("DOMContentLoaded", () => {
       const stars = Array.from(document.querySelectorAll(".star"));
-      stars.forEach((star, index) => {
-        randomizeStar(star, index);
-        star.addEventListener("animationiteration", () => randomizeStar(star, index));
+      stars.forEach((star) => {
+        randomizeStar(star);
+        star.addEventListener("animationiteration", () => randomizeStar(star));
       });
       initCloudMotion();
     });
