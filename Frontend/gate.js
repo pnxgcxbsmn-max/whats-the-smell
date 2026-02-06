@@ -6,8 +6,9 @@
 const GATE_VERSION = "2026-02-05-active";
 
 // ===== GATE ACTIVE =====
-// Password required: "NoseKnows"
+// Password required: "reymono95"
 const SHOULD_SKIP_GATE = false;
+const BETA_PASSWORD = "reymono95";
 
 // Debug
 console.log("%c[GATE] ACTIVE - Beta access gate enabled", "color: cyan; font-size: 16px; font-weight: bold;");
