@@ -4,7 +4,7 @@
   // Robust bindings: language + category + generate
   // =========================
 
-  console.log("%c[APP] update 9:15 PM 2.5.26 | Gate: 24h active", "color: lime; font-size: 14px; font-weight: bold;");
+  console.log("%c[APP] patch 2.0", "color: lime; font-size: 14px; font-weight: bold;");
 
   // ===== Use GATEWAY module for API resolution =====
   // GATEWAY is defined in gateway.js (loaded before app.js)
