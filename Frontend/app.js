@@ -13,8 +13,24 @@
     return;
   }
 
-  const API = GATEWAY.apiBase;
+  const API = String(GATEWAY.apiBase || "").trim().replace(/\/+$/, "");
+  const API_VALID = /^https?:\/\//i.test(API);
   console.log("%c[APP] API endpoint: " + API + " | Environment: " + GATEWAY.env, "color: cyan; font-size: 11px;");
+  if (!API_VALID) {
+    console.error("[APP] Invalid API base. Expected absolute http(s) URL. Got:", API);
+  }
+
+  const SAFE_FETCH = (typeof window !== "undefined" && typeof window.fetch === "function")
+    ? window.fetch.bind(window)
+    : null;
+
+  function safeFetch(url, options) {
+    if (!SAFE_FETCH) {
+      console.error("[APP] window.fetch is not available in this environment.");
+      return Promise.reject(new Error("fetch not available"));
+    }
+    return SAFE_FETCH(url, options);
+  }
 
   // ===== DOM =====
   const el = {
@@ -92,7 +108,7 @@
       }
 
       try {
-        const response = await fetch(
+        const response = await safeFetch(
           `${apiUrl}?q=${encodeURIComponent(text)}&langpair=en|${targetLang}`
         );
         const data = await response.json();
@@ -1182,13 +1198,17 @@ function updateCarouselFocus() {
         }
       showLoadingSpinner();
       const univ = String(universe || "").trim();
+      if (!API_VALID) {
+        throw new Error("Invalid API base; cannot fetch image.");
+      }
+
       let url = `${API}/api/ai-image?name=${encodeURIComponent(name)}&category=${encodeURIComponent(categoryId || "any")}&style=anime`;
       if (univ) {
         url += `&universe=${encodeURIComponent(univ)}`;
       }
       
       console.log("Fetching image from:", url);
-      const r = await fetch(url);
+      const r = await safeFetch(url);
       const data = await r.json().catch(() => ({}));
       const imgUrl = String(data?.url || "");
       
@@ -1237,7 +1257,12 @@ function updateCarouselFocus() {
 
   // ===== Backend calls =====
   async function apiPost(path, body) {
-    const r = await fetch(`${API}${path}`, {
+    if (!API_VALID) {
+      console.error("[APP] Invalid API base; cannot call backend:", API, "path:", path);
+      throw new Error("API base invalid. Check configuration.");
+    }
+
+    const r = await safeFetch(`${API}${path}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body || {}),
