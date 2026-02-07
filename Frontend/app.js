@@ -1147,48 +1147,73 @@ function updateCarouselFocus() {
   // ===== Character image =====
   // OPTIMIZATION 3: Lazy load images with IntersectionObserver
   function initLazyLoadImage() {
-    if (!el.characterImg) return;
-    
-    // Setup IntersectionObserver for lazy loading
-    const imageObserver = new IntersectionObserver((entries) => {
-      entries.forEach(entry => {
-        if (entry.isIntersecting && entry.target.dataset.lazyImageUrl) {
-          const url = entry.target.dataset.lazyImageUrl;
-          entry.target.src = url;
-          delete entry.target.dataset.lazyImageUrl;
-          imageObserver.unobserve(entry.target);
-          console.log("Lazy loaded image:", url.slice(0, 50));
-          
-          // Hide loading spinner when image successfully loads
-            entry.target.onload = () => {
-              hideLoadingSpinner();
-              const frame = entry.target.closest('.imgFrame');
-              if (frame) frame.classList.remove("spinning");
-              entry.target.classList.add("is-visible");
-              entry.target.style.opacity = "1";
-              entry.target.onload = null; // Clean up listener
-            };
-            entry.target.onerror = () => {
-              hideLoadingSpinner();
-              const frame = entry.target.closest('.imgFrame');
-              if (frame) frame.classList.remove("spinning");
-              entry.target.style.opacity = "0";
-              entry.target.onerror = null; // Clean up listener
-            };
-        }
+    return new Promise((resolve) => {
+      if (!el.characterImg) return resolve(false);
+
+      const img = el.characterImg;
+      const finalize = (ok) => {
+        if (finalize.done) return;
+        finalize.done = true;
+        resolve(!!ok);
+      };
+
+      const attachHandlers = () => {
+        img.onload = () => {
+          hideLoadingSpinner();
+          const frame = img.closest('.imgFrame');
+          if (frame) frame.classList.remove("spinning");
+          img.classList.add("is-visible");
+          img.style.opacity = "1";
+          img.onload = null;
+          img.onerror = null;
+          finalize(true);
+        };
+        img.onerror = () => {
+          hideLoadingSpinner();
+          const frame = img.closest('.imgFrame');
+          if (frame) frame.classList.remove("spinning");
+          img.style.opacity = "0";
+          img.onload = null;
+          img.onerror = null;
+          finalize(false);
+        };
+      };
+
+      const loadNow = () => {
+        const url = img.dataset.lazyImageUrl;
+        if (!url) return finalize(false);
+        attachHandlers();
+        img.src = url;
+        delete img.dataset.lazyImageUrl;
+        console.log("Lazy loaded image:", url.slice(0, 50));
+      };
+
+      if (!("IntersectionObserver" in window)) {
+        loadNow();
+        return;
+      }
+
+      // Setup IntersectionObserver for lazy loading
+      const imageObserver = new IntersectionObserver((entries, observer) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting && entry.target.dataset.lazyImageUrl) {
+            observer.unobserve(entry.target);
+            loadNow();
+          }
+        });
+      }, {
+        rootMargin: '50px' // Start loading 50px before element is visible
       });
-    }, {
-      rootMargin: '50px' // Start loading 50px before element is visible
+      
+      imageObserver.observe(img);
     });
-    
-    imageObserver.observe(el.characterImg);
   }
 
   async function setCharacterImage(charName, categoryId, universe = "") {
     const name = String(charName || "").trim();
     if (!name) {
       console.warn("setCharacterImage: No name provided");
-      return;
+      return false;
     }
 
     try {
@@ -1224,10 +1249,11 @@ function updateCarouselFocus() {
       el.characterImg.dataset.lazyImageUrl = `${API}${imgUrl}`;
       el.characterImg.style.display = "block";
       
-      // Trigger lazy loading
-      initLazyLoadImage();
+      // Trigger lazy loading and await the actual image load
+      const ok = await initLazyLoadImage();
       
       console.log("Image queued for lazy loading");
+      return ok;
     } catch (err) {
       console.error("setCharacterImage error:", err.message);
       hideLoadingSpinner();
@@ -1242,7 +1268,7 @@ function updateCarouselFocus() {
           if (frame) frame.classList.remove("spinning");
           el.characterImg.classList.add("is-visible");
           el.characterImg.style.opacity = "1";
-          return;
+          return true;
         }
       } catch (e) {
         console.warn("Fallback cached image check failed:", e?.message || e);
@@ -1421,7 +1447,6 @@ function updateCarouselFocus() {
         throw new Error(`La respuesta recibida está vacía o incompleta (${state.resultEn.length} caracteres). Intenta nuevamente.`);
       }
       
-      state.hasResult = true;
       const isCached = data?.cached || false;
 
       // ===== INCREMENT GENERATION COUNTER (Beta Early Access) =====
@@ -1439,49 +1464,34 @@ function updateCarouselFocus() {
         universe: state.characterUniverse,
       });
 
-      // OPTIMIZATION 2: Start image generation in parallel (don't wait)
-      // This fires in background while we render text
+      // Prepare tasks and wait before rendering
       const imagePromise = setCharacterImage(state.officialName, state.selectedCategory, state.characterUniverse)
-        .then(() => console.log("Image generation completed in background"))
-        .catch(imgErr => console.error("Image generation failed in background:", imgErr.message));
+        .then((ok) => {
+          if (ok) console.log("Image generation completed");
+          return ok;
+        })
+        .catch(imgErr => {
+          console.error("Image generation failed:", imgErr.message);
+          return false;
+        });
 
-      // OPTIMIZATION: Start translation in parallel (don't wait)
-      const translationPromise = (async () => {
-        if (!state.resultEs || state.resultEs.length < 50) {
-          console.log("Fetching translation in parallel...");
-          try {
-            const transResp = await apiPost("/api/translate", {
-              text: state.resultEn,
-              lang: "es",
-              character: state.officialName,
-              category: state.selectedCategory || "any"
-            });
-            state.resultEs = String(transResp?.text || "").trim();
-            console.log("Translation completed in background");
-          } catch (transErr) {
-            console.error("Translation failed in background:", transErr.message);
-          }
-        }
-      })();
+      const needsEs = curLang() === "es";
+      const translationPromise = needsEs
+        ? ensureTranslation("es", isCached)
+        : Promise.resolve();
 
-      // RENDER IMMEDIATELY with EN text (translation will come later if needed)
-      console.log("Rendering results immediately (text ready)...");
+      await Promise.all([imagePromise, translationPromise]);
+
+      // Render together once everything is ready
+      state.hasResult = true;
+      console.log("Rendering results after all tasks ready...");
       renderResultForCurrentLang();
 
       // Clear search text after results are ready
       el.characterInput.value = "";
-      
+
       // Marcar como completado
       setStatus("done");
-
-      // Wait for parallel tasks in background (non-blocking)
-      Promise.all([imagePromise, translationPromise]).then(() => {
-        console.log("All background tasks completed");
-        // Re-render if translation came in and user switched languages
-        if (state.hasResult) {
-          renderResultForCurrentLang();
-        }
-      });
     } catch (e) {
       showError(String(e?.message || e));
       stopLoadingScreen();
