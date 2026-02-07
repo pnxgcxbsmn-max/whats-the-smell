@@ -297,9 +297,20 @@ async function fetchImageBuffer(url, timeoutMs = 12000) {
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), timeoutMs);
   try {
+    let needsAuth = false;
+    try {
+      const parsed = new URL(String(url));
+      needsAuth = parsed.hostname.includes("aimlapi.com");
+    } catch {
+      needsAuth = false;
+    }
+
     const r = await fetch(url, {
       signal: controller.signal,
-      headers: { "User-Agent": "whats-the-smell/1.0" },
+      headers: {
+        "User-Agent": "whats-the-smell/1.0",
+        ...(needsAuth && OPENAI_API_KEY ? { "Authorization": `Bearer ${OPENAI_API_KEY}` } : {}),
+      },
     });
     if (!r.ok) throw new Error(`Upstream HTTP ${r.status}`);
     const ct = r.headers.get("content-type") || "";
