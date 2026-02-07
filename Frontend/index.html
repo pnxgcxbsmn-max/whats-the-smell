@@ -47,6 +47,10 @@
 
   <link rel="apple-touch-icon" href="assets/brand/logo-en.png" />
 
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Sora:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+
   <title>What's the Smell?</title>
 </head>
 
@@ -59,6 +63,9 @@
       --muted: #aaa;
       --text: #fff;
       --line: rgba(255, 255, 255, 0.2);
+
+      --font-ui: "Sora", "Segoe UI", system-ui, -apple-system, sans-serif;
+      --font-display: "Cormorant Garamond", "Times New Roman", serif;
 
       --ddH: 270px;
       --ddGap: 8px;
@@ -76,7 +83,7 @@
       margin:0;
       padding:26px;
       color:var(--text);
-      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+      font-family: var(--font-ui);
       background:
         radial-gradient(1200px 700px at 60% 45%, rgba(255,255,255,.10), rgba(0,0,0,.15) 60%, rgba(0,0,0,.30) 100%),
         url("assets/bg/Background.png");
@@ -499,6 +506,8 @@
     .sectionTitle{
       font-size:14px;
       color:var(--muted);
+      font-family: var(--font-display);
+      letter-spacing: 0.6px;
       margin: 14px 0 10px;
       transition: margin-top 260ms cubic-bezier(.2,.9,.2,1);
     }
@@ -1150,6 +1159,7 @@
       color: rgba(255,255,255,1);
       text-transform: uppercase;
       letter-spacing: 0.5px;
+      font-family: var(--font-display);
       margin-bottom: 8px;
       border-bottom: 1px solid rgba(255,255,255,.2);
       padding-bottom: 8px;
