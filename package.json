@@ -4,6 +4,7 @@
     "scripts": {
       "start": "cd api && npm start",
       "frontend": "cd Frontend && npx serve -l 3000",
-      "backend": "cd api && npm start"
+      "backend": "cd api && npm start",
+      "postinstall": "npm install --prefix api"
     }
   }
