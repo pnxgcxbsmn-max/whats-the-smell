@@ -1510,6 +1510,193 @@
         height: 20px;
       }
     }
+
+    /* ===== App Shell Views / Bottom Nav ===== */
+    .app-shell{
+      position:relative;
+      min-height:100vh;
+      padding-bottom:80px;
+    }
+
+    .app-grid{
+      display:grid;
+      grid-template-columns:1.35fr 1fr;
+      gap:20px;
+    }
+
+    .left-column{
+      position:relative;
+      min-height:100%;
+    }
+
+    .app-view{ display:none; }
+    .app-view.is-active{ display:block; }
+
+    .app-tabs{
+      position:fixed;
+      left:0;
+      right:0;
+      bottom:0;
+      display:flex;
+      justify-content:space-around;
+      background:rgba(6,8,18,.92);
+      backdrop-filter:blur(16px);
+      border-top:1px solid rgba(255,255,255,.12);
+      padding:10px 12px;
+      z-index:999;
+    }
+
+    .app-tab-btn{
+      flex:1;
+      border:none;
+      background:transparent;
+      color:rgba(255,255,255,.65);
+      font-size:11px;
+      text-transform:uppercase;
+      font-weight:700;
+      letter-spacing:0.5px;
+      padding:6px 8px;
+      border-radius:12px;
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      align-items:center;
+      cursor:pointer;
+      transition:color .2s ease, background .2s ease;
+    }
+
+    .app-tab-btn svg{ width:18px; height:18px; fill:currentColor; }
+    .app-tab-btn.is-active{ color:#fff; background:rgba(255,255,255,.12); }
+
+    .library-controls,
+    .favorites-controls,
+    .feedback-fields{
+      display:flex;
+      flex-wrap:wrap;
+      gap:12px;
+      margin-bottom:16px;
+    }
+
+    .library-controls input,
+    .library-controls select,
+    .feedback-fields input,
+    .feedback-fields select,
+    .feedback-fields textarea{
+      flex:1 1 200px;
+      border-radius:12px;
+      border:1px solid rgba(255,255,255,.18);
+      background:rgba(10,16,30,.45);
+      color:#fff;
+      padding:10px 12px;
+      font-size:13px;
+    }
+
+    .library-list,
+    .favorites-list{
+      list-style:none;
+      margin:0;
+      padding:0;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      max-height:520px;
+      overflow:auto;
+    }
+
+    .library-item{
+      border:1px solid rgba(255,255,255,.12);
+      border-radius:14px;
+      padding:12px;
+      background:rgba(255,255,255,.06);
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+    }
+
+    .library-item-header{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:8px;
+    }
+
+    .library-item-actions{
+      display:flex;
+      gap:8px;
+    }
+
+    .pill-btn{
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,.2);
+      background:rgba(255,255,255,.08);
+      color:#fff;
+      font-size:12px;
+      padding:6px 10px;
+      cursor:pointer;
+    }
+
+    .pill-btn.danger{ border-color:rgba(255,120,120,.6); color:#ffb0b0; }
+    .pill-btn.primary{ border-color:rgba(120,220,255,.6); color:#c8f5ff; }
+
+    .empty-state{
+      padding:20px;
+      border-radius:12px;
+      border:1px dashed rgba(255,255,255,.2);
+      color:rgba(255,255,255,.7);
+      text-align:center;
+      margin:20px 0;
+    }
+
+    .feedback-card textarea{
+      min-height:140px;
+      resize:vertical;
+    }
+
+    .feedback-status{
+      font-size:13px;
+      min-height:18px;
+      color:var(--muted);
+      margin-top:10px;
+    }
+
+    .detail-close{
+      display:none;
+      position:absolute;
+      top:12px;
+      right:12px;
+      border:none;
+      background:rgba(0,0,0,.4);
+      color:#fff;
+      border-radius:999px;
+      width:32px;
+      height:32px;
+      cursor:pointer;
+      z-index:4;
+    }
+
+    @media(max-width:1024px){
+      .app-grid{ grid-template-columns:1fr; }
+      .right.card{
+        position:fixed;
+        inset:0;
+        background:rgba(8,10,18,.98);
+        padding:24px 16px;
+        overflow:auto;
+        transform:translateY(120%);
+        transition:transform .3s ease;
+        z-index:900;
+      }
+      body.show-detail .right.card{ transform:translateY(0); }
+      .detail-close{ display:block; }
+    }
+
+    @media(max-width:640px){
+      .app-shell{ padding-bottom:90px; }
+      .app-tabs{ padding-bottom:20px; }
+      .library-controls,
+      .favorites-controls,
+      .feedback-fields{ flex-direction:column; }
+    }
   
 
 /* ===== Category dropdown (in-box carousel) ===== */
@@ -1883,72 +2070,127 @@ color: rgba(245,250,255,.96) !important;
   <div class="cloud-layer"></div>
   <div class="cloud-layer alt"></div>
   
-  <div class="topbar">
-    <!-- LOGO replaces title -->
-    <div class="appLogo">
-      <img id="appLogoImg" src="assets/brand/logo-es.png" alt="¿A qué huele?" />
-    </div>
-
-    <div class="langBox">
-      <span id="langLabel">Language</span>
-
-      <div id="langSwitch" class="langSwitch is-es" role="switch" aria-checked="false" tabindex="0" title="Toggle language">
-        <div class="langKnob"></div>
-        <button type="button" class="langOption" data-lang="es" aria-label="Español">Español</button>
-        <button type="button" class="langOption" data-lang="en" aria-label="English">English</button>
+  <div class="app-shell" id="appShell">
+    <div class="topbar">
+      <!-- LOGO replaces title -->
+      <div class="appLogo">
+        <img id="appLogoImg" src="assets/brand/logo-es.png" alt="¿A qué huele?" />
       </div>
 
-      <select id="langSelect">
-        <option value="en" selected>English</option>
-        <option value="es">Español</option>
-      </select>
-    </div>
-  </div>
+      <div class="langBox">
+        <span id="langLabel">Language</span>
 
-  <div class="grid">
-    <!-- LEFT -->
-    <div class="card left">
-      <div class="row">
-        <div>
-          <label id="characterLabel" for="characterInput">Character</label>
-          <input id="characterInput" placeholder="e.g., Naruto" autocomplete="off"/>
+        <div id="langSwitch" class="langSwitch is-es" role="switch" aria-checked="false" tabindex="0" title="Toggle language">
+          <div class="langKnob"></div>
+          <button type="button" class="langOption" data-lang="es" aria-label="Español">Español</button>
+          <button type="button" class="langOption" data-lang="en" aria-label="English">English</button>
         </div>
 
-        <div>
-          <label id="categoryLabel" for="categorySelect">Category</label>
-
-          <div class="ddWrap" id="categoryDD">
-  <button type="button" class="ddBtn" id="categoryBtn" aria-haspopup="listbox" aria-expanded="false">
-    <span class="ddValue" id="categoryValue">Choose one</span>
-  </button>
-
-  <div class="ddDrawer" id="categoryDrawer">
-    <div class="ddViewport" id="ddViewport">
-      <button type="button" class="ddArrowLeft" id="categoryArrowLeft" aria-label="Previous category">◀</button>
-      <button type="button" class="ddActiveValue" id="categoryValueActive" aria-label="Confirm category">Choose one</button>
-      <button type="button" class="ddArrowRight" id="categoryArrowRight" aria-label="Next category">▶</button>
+        <select id="langSelect">
+          <option value="en" selected>English</option>
+          <option value="es">Español</option>
+        </select>
+      </div>
     </div>
-  </div>
-</div>
 
-          <select id="categorySelect"></select>
+    <div class="app-grid" id="appGrid">
+      <div class="left-column">
+        <section id="view-search" class="app-view is-active" aria-labelledby="searchTab">
+          <div class="card left">
+            <div class="row">
+              <div>
+                <label id="characterLabel" for="characterInput">Character</label>
+                <input id="characterInput" placeholder="e.g., Naruto" autocomplete="off"/>
+              </div>
+
+              <div>
+                <label id="categoryLabel" for="categorySelect">Category</label>
+
+                <div class="ddWrap" id="categoryDD">
+      <button type="button" class="ddBtn" id="categoryBtn" aria-haspopup="listbox" aria-expanded="false">
+        <span class="ddValue" id="categoryValue">Choose one</span>
+      </button>
+
+      <div class="ddDrawer" id="categoryDrawer">
+        <div class="ddViewport" id="ddViewport">
+          <button type="button" class="ddArrowLeft" id="categoryArrowLeft" aria-label="Previous category">◀</button>
+          <button type="button" class="ddActiveValue" id="categoryValueActive" aria-label="Confirm category">Choose one</button>
+          <button type="button" class="ddArrowRight" id="categoryArrowRight" aria-label="Next category">▶</button>
         </div>
       </div>
-
-      <div class="actions">
-        <button id="smellBtn" class="btn">Identify scent</button>
-        <button id="clearBtn" class="btn secondary">New trail</button>
-        <div id="statusText"></div>
-      </div>
-
-      <div id="errorBox"></div>
-
-      <div class="sectionTitle" id="outputLabel">Scent profile…</div>
-      <div id="outputBox" class="outputBox"></div>
     </div>
 
-    <!-- RIGHT -->
-    <div class="card right">
+                <select id="categorySelect"></select>
+              </div>
+            </div>
+
+            <div class="actions">
+              <button id="smellBtn" class="btn">Identify scent</button>
+              <button id="clearBtn" class="btn secondary">New trail</button>
+              <div id="statusText"></div>
+            </div>
+
+            <div id="errorBox"></div>
+
+            <div class="sectionTitle" id="outputLabel">Scent profile…</div>
+            <div id="outputBox" class="outputBox"></div>
+          </div>
+        </section>
+
+        <section id="view-library" class="app-view" aria-labelledby="libraryTab">
+          <div class="card left library-card">
+            <div class="sectionTitle">Mi Biblioteca</div>
+            <div class="library-controls">
+              <input id="librarySearchInput" type="search" placeholder="Buscar por personaje" aria-label="Buscar en la biblioteca" />
+              <select id="libraryCategoryFilter" aria-label="Filtrar por categoría">
+                <option value="all">Todas las categorías</option>
+              </select>
+              <select id="librarySortSelect" aria-label="Ordenar resultados">
+                <option value="recent">Más recientes</option>
+                <option value="oldest">Más antiguas</option>
+                <option value="az">A-Z</option>
+              </select>
+            </div>
+            <div class="empty-state" id="libraryEmptyState">Aún no guardas rastros aromáticos.</div>
+            <ul class="library-list" id="libraryList" aria-live="polite"></ul>
+          </div>
+        </section>
+
+        <section id="view-favorites" class="app-view" aria-labelledby="favoritesTab">
+          <div class="card left favorites-card">
+            <div class="sectionTitle">Favoritos</div>
+            <p class="charFact">Marca cualquier aroma como favorito y aparecerá aquí para acceso rápido.</p>
+            <div class="empty-state" id="favoritesEmptyState">Todavía no tienes favoritos.</div>
+            <ul class="favorites-list" id="favoritesList" aria-live="polite"></ul>
+          </div>
+        </section>
+
+        <section id="view-feedback" class="app-view" aria-labelledby="feedbackTab">
+          <div class="card left feedback-card">
+            <div class="sectionTitle">Feedback &amp; Bug report</div>
+            <form id="feedbackForm" novalidate>
+              <div class="feedback-fields">
+                <label for="feedbackType" class="sheetLabel">Tipo</label>
+                <select id="feedbackType" required>
+                  <option value="feedback">Feedback</option>
+                  <option value="bug">Bug</option>
+                </select>
+                <label for="feedbackDescription" class="sheetLabel">Descripción</label>
+                <textarea id="feedbackDescription" placeholder="Cuéntanos qué mejorar o qué salió mal" required></textarea>
+                <label class="sheetLabel" for="feedbackAttachScreenshot">
+                  <input type="checkbox" id="feedbackAttachScreenshot" /> Adjuntar captura automática
+                </label>
+              </div>
+              <button type="submit" class="btn" id="feedbackSubmitBtn">Enviar</button>
+            </form>
+            <div class="feedback-status" id="feedbackStatus"></div>
+          </div>
+        </section>
+      </div>
+
+      <!-- RIGHT -->
+      <div class="card right" id="detailCard">
+        <button class="detail-close" id="detailCloseBtn" aria-label="Cerrar detalle">✕</button>
       <div class="sectionTitle" id="visualTitle1">Character Visual and Sheet</div>
 
       <div class="visualRow">
@@ -2005,6 +2247,26 @@ color: rgba(245,250,255,.96) !important;
         </div>
       </div>
     </div>
+    </div>
+
+    <nav class="app-tabs" id="appTabs" aria-label="Navegación principal">
+      <button class="app-tab-btn is-active" data-view="search" id="searchTab">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6" stroke="currentColor" stroke-width="2" fill="none"/><line x1="16" y1="16" x2="21" y2="21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <span>Buscar</span>
+      </button>
+      <button class="app-tab-btn" data-view="library" id="libraryTab">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="4" height="14" rx="1" stroke="currentColor" stroke-width="2" fill="none"/><rect x="10" y="5" width="4" height="14" rx="1" stroke="currentColor" stroke-width="2" fill="none"/><rect x="16" y="5" width="4" height="14" rx="1" stroke="currentColor" stroke-width="2" fill="none"/></svg>
+        <span>Biblioteca</span>
+      </button>
+      <button class="app-tab-btn" data-view="favorites" id="favoritesTab">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20l-1.45-1.32C6.4 14.36 4 12.28 4 9.5 4 7.5 5.5 6 7.5 6c1.2 0 2.4.6 3.15 1.57C11.1 6.6 12.3 6 13.5 6 15.5 6 17 7.5 17 9.5c0 2.78-2.4 4.86-6.55 9.18L12 20z" fill="currentColor"/></svg>
+        <span>Favoritos</span>
+      </button>
+      <button class="app-tab-btn" data-view="feedback" id="feedbackTab">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v10H7l-3 3V4z" stroke="currentColor" stroke-width="2" fill="none" stroke-linejoin="round"/></svg>
+        <span>Feedback</span>
+      </button>
+    </nav>
   </div>
 
   <!-- Trademark Footer -->
@@ -2062,26 +2324,19 @@ color: rgba(245,250,255,.96) !important;
     });
   </script>
 
-  <script>
-    // Force-clean previous service workers and caches to avoid stale assets in this session
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.getRegistrations().then((regs) => regs.forEach((r) => r.unregister()));
-    }
-    if (window.caches) {
-      caches.keys().then((keys) => keys.forEach((k) => caches.delete(k)));
-    }
-  </script>
   <!-- Gateway module: defines GATEWAY global (must load first) -->
   <script src="gateway.js?v=20260206a"></script>
   <!-- Gate UI: access-gate.js -->
   <script src="access-gate.js?v=20260206b"></script>
+  <!-- html2canvas for feedback screenshots -->
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" defer></script>
   <!-- Main app: uses GATEWAY module -->
   <script src="app.js?v=20260206a" defer></script>
   <script>
-    const ENABLE_SW = false; // disable SW to avoid stale assets during debug
+    const ENABLE_SW = true;
     if (ENABLE_SW && "serviceWorker" in navigator) {
       window.addEventListener("load", () => {
-        navigator.serviceWorker.register("/sw.js?v=20260205")
+        navigator.serviceWorker.register("/sw.js?v=20260207")
           .then(() => console.log("Service Worker registrado"))
           .catch(err => console.error("SW error", err));
       });

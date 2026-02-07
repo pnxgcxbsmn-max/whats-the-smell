@@ -32,6 +32,11 @@
     return SAFE_FETCH(url, options);
   }
 
+  const APP_BUILD_VERSION = GATEWAY?.VERSION || "frontend-20260207";
+  const generateId = () => (typeof crypto !== "undefined" && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : `wts-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
   // ===== DOM =====
   const el = {
     langSelect: document.getElementById("langSelect"),
@@ -80,6 +85,24 @@
       document.getElementById("compName3"),
       document.getElementById("compName4"),
     ],
+    appTabs: document.getElementById("appTabs"),
+    appViews: document.querySelectorAll(".app-view"),
+    tabButtons: document.querySelectorAll(".app-tab-btn"),
+    libraryList: document.getElementById("libraryList"),
+    libraryEmptyState: document.getElementById("libraryEmptyState"),
+    librarySearchInput: document.getElementById("librarySearchInput"),
+    libraryCategoryFilter: document.getElementById("libraryCategoryFilter"),
+    librarySortSelect: document.getElementById("librarySortSelect"),
+    favoritesList: document.getElementById("favoritesList"),
+    favoritesEmptyState: document.getElementById("favoritesEmptyState"),
+    feedbackForm: document.getElementById("feedbackForm"),
+    feedbackType: document.getElementById("feedbackType"),
+    feedbackDescription: document.getElementById("feedbackDescription"),
+    feedbackAttachScreenshot: document.getElementById("feedbackAttachScreenshot"),
+    feedbackStatus: document.getElementById("feedbackStatus"),
+    feedbackSubmitBtn: document.getElementById("feedbackSubmitBtn"),
+    detailCard: document.getElementById("detailCard"),
+    detailCloseBtn: document.getElementById("detailCloseBtn"),
   };
 
   // ===== Guard: if DOM missing, stop gracefully =====
@@ -167,7 +190,35 @@
     sheetMainSensation: "Main Sensation:",
     sheetOlfactoryStyle: "Olfactory Style:",
     sheetLastImpression: "Last Impression:",
-    aromaFound: "Aroma identified",},
+      aromaFound: "Aroma identified",
+      tabSearch: "Search",
+      tabLibrary: "Library",
+      tabFavorites: "Favorites",
+      tabFeedback: "Feedback",
+      libraryTitle: "My Library",
+      libraryEmpty: "No saved trails yet.",
+      librarySearchPlaceholder: "Search by character",
+      libraryFilterAll: "All categories",
+      librarySortRecent: "Newest first",
+      librarySortOldest: "Oldest first",
+      librarySortAZ: "A-Z",
+      favoritesTitle: "Favorites",
+      favoritesEmpty: "No favorites yet.",
+      favoritesHint: "Mark any aroma as favorite to find it here.",
+      feedbackTitle: "Feedback & Bug report",
+      feedbackTypeLabel: "Type",
+      feedbackDescriptionLabel: "Description",
+      feedbackAttachLabel: "Attach screenshot automatically",
+      feedbackSubmit: "Send",
+      feedbackThanks: "Thanks! We'll review your note shortly.",
+      feedbackError: "Couldn't send feedback. Try again in a moment.",
+      feedbackMissingDescription: "Please describe your feedback.",
+      libraryActionView: "Open",
+      libraryActionFavorite: "Favorite",
+      libraryActionUnfavorite: "Unfavorite",
+      libraryActionDelete: "Delete",
+      libraryTimePrefix: "Saved",
+    },
     es: {
       appTitle: "¿A qué huele?",
       character: "Personaje",
@@ -194,6 +245,33 @@
       sheetOlfactoryStyle: "Estilo Olfativo:",
       sheetLastImpression: "Impresión Final:",
       aromaFound: "Aroma identificado",
+      tabSearch: "Buscar",
+      tabLibrary: "Biblioteca",
+      tabFavorites: "Favoritos",
+      tabFeedback: "Feedback",
+      libraryTitle: "Mi Biblioteca",
+      libraryEmpty: "Aún no guardas rastros aromáticos.",
+      librarySearchPlaceholder: "Buscar por personaje",
+      libraryFilterAll: "Todas las categorías",
+      librarySortRecent: "Más recientes",
+      librarySortOldest: "Más antiguas",
+      librarySortAZ: "A-Z",
+      favoritesTitle: "Favoritos",
+      favoritesEmpty: "Todavía no tienes favoritos.",
+      favoritesHint: "Marca cualquier aroma como favorito para verlo aquí.",
+      feedbackTitle: "Feedback y reporte de bugs",
+      feedbackTypeLabel: "Tipo",
+      feedbackDescriptionLabel: "Descripción",
+      feedbackAttachLabel: "Adjuntar captura automática",
+      feedbackSubmit: "Enviar",
+      feedbackThanks: "¡Gracias! Revisaremos tu nota pronto.",
+      feedbackError: "No pudimos enviar el feedback. Intenta de nuevo.",
+      feedbackMissingDescription: "Por favor describe tu feedback.",
+      libraryActionView: "Abrir",
+      libraryActionFavorite: "Favorito",
+      libraryActionUnfavorite: "Quitar favorito",
+      libraryActionDelete: "Eliminar",
+      libraryTimePrefix: "Guardado",
     },
   };
 
@@ -274,6 +352,14 @@
     characterUniverse: "",
     currentErrorKey: null, // Guardar la clave del error actual para retraducir
     isInitialLoad: true, // Flag to skip animation on first load
+    detail: null,
+    detailSource: "none",
+    activeView: "search",
+    sessionId: (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : `wts-${Date.now()}`,
+    libraryItems: [],
+    libraryFilters: { search: "", category: "all", sort: "recent" },
+    currentImageUrl: "",
+    libraryReady: false,
   };
 
   // ===== Helpers =====
@@ -288,29 +374,37 @@ function sanitizeFilename(name) {
     .slice(0, 50);
 }
 
+function escapeHtml(str) {
+  return String(str || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 // Try loading a cached generated image directly from /generated as a fallback
 async function tryLoadCachedGeneratedImage(charName) {
   const base = sanitizeFilename(charName);
-  if (!base) return false;
+  if (!base) return null;
   const exts = ["png", "jpg", "webp"];
 
-  // Try each extension until one loads
   for (const ext of exts) {
     const candidate = `${API}/generated/${base}.${ext}`;
+    const urlWithBust = `${candidate}?v=${Date.now()}`;
     const ok = await new Promise((resolve) => {
       const img = new Image();
       img.onload = () => resolve(true);
       img.onerror = () => resolve(false);
-      // cache-bust lightly in case browser cached a 404
-      img.src = `${candidate}?v=${Date.now()}`;
+      img.src = urlWithBust;
     });
     if (ok) {
-      el.characterImg.src = `${candidate}?v=${Date.now()}`;
+      el.characterImg.src = urlWithBust;
       el.characterImg.style.display = "block";
-      return true;
+      return urlWithBust;
     }
   }
-  return false;
+  return null;
 }
 
   function curLang() {
@@ -503,6 +597,49 @@ async function tryLoadCachedGeneratedImage(charName) {
     const total = Math.max(240, Math.min(raw, 340)); // clamp para evitar “línea” de glow
 
     document.documentElement.style.setProperty("--fieldW", `${total}px`);
+  }
+
+  function setActiveView(view) {
+    if (!view) return;
+    state.activeView = view;
+
+    if (el.appViews) {
+      el.appViews.forEach((section) => {
+        const match = section.id === `view-${view}`;
+        section.classList.toggle("is-active", match);
+      });
+    }
+
+    if (el.tabButtons) {
+      el.tabButtons.forEach((btn) => {
+        const match = (btn.dataset.view || "") === view;
+        btn.classList.toggle("is-active", match);
+      });
+    }
+
+    if (view !== "search") {
+      closeDetailPanel();
+    } else if (state.detail) {
+      openDetailPanel();
+    }
+  }
+
+  function bindTabs() {
+    if (!el.tabButtons) return;
+    el.tabButtons.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const view = btn.dataset.view || "search";
+        setActiveView(view);
+      });
+    });
+  }
+
+  function openDetailPanel() {
+    document.body.classList.add("show-detail");
+  }
+
+  function closeDetailPanel() {
+    document.body.classList.remove("show-detail");
   }
 
   // ===== UI copy =====
@@ -825,18 +962,19 @@ function updateCarouselFocus() {
 
   function setCuriosityForCharacter(nameRaw) {
     if (!el.curiosityBox) return;
+    const detail = state.detail;
     
-    // Si hay resultado, extraer curiosidad del resultado de la IA (traducido)
-    if (state.hasResult) {
+    if (detail && (detail.textEn || detail.textEs)) {
       const lang = curLang();
-      const txt = lang === "es" ? (state.resultEs || state.resultEn) : state.resultEn;
+      const txt = lang === "es" ? (detail.textEs || detail.textEn) : (detail.textEn || detail.textEs);
       const curiosity = parseSectionAny(txt || "", ["Aromatic Curiosity","Curiosidad Aromática","Curiosidad aromática"]) || "";
       el.curiosityBox.textContent = curiosity || "—";
       return;
     }
     
     // Si no hay resultado, usar el mapa local (fallback)
-    const key = String(nameRaw || "").trim().toLowerCase();
+    const fallbackName = nameRaw || detail?.characterName || detail?.officialName || "";
+    const key = String(fallbackName || "").trim().toLowerCase();
     const hit = CANON_CURIOSITY_MAP[key] || CANON_CURIOSITY_MAP[key.replace(/\s+/g," ")] || null;
     if (!hit) {
       el.curiosityBox.textContent = "—";
@@ -932,6 +1070,276 @@ function updateCarouselFocus() {
     ].filter(x=>x!=="" || x==="" ).join("\n").trim();
 
     return out;
+  }
+
+  const LibraryStore = (() => {
+    const DB_NAME = "wtsLibrary";
+    const DB_VERSION = 1;
+    const STORE = "entries";
+    const supported = typeof indexedDB !== "undefined";
+    let dbPromise = null;
+
+    function openDB() {
+      if (!supported) {
+        return Promise.reject(new Error("IndexedDB not supported"));
+      }
+      if (dbPromise) return dbPromise;
+      dbPromise = new Promise((resolve, reject) => {
+        const request = indexedDB.open(DB_NAME, DB_VERSION);
+        request.onupgradeneeded = (event) => {
+          const db = event.target.result;
+          if (!db.objectStoreNames.contains(STORE)) {
+            const store = db.createObjectStore(STORE, { keyPath: "id" });
+            store.createIndex("byFavorite", "favorite", { unique: false });
+            store.createIndex("byTimestamp", "timestamp", { unique: false });
+          }
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      return dbPromise;
+    }
+
+    function withStore(mode, handler) {
+      return openDB().then((db) => new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE, mode);
+        const store = tx.objectStore(STORE);
+        let request;
+        try {
+          request = handler(store);
+        } catch (err) {
+          reject(err);
+          return;
+        }
+
+        if (request && typeof request.onsuccess === "function") {
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error);
+        } else {
+          tx.oncomplete = () => resolve(request);
+          tx.onerror = () => reject(tx.error);
+        }
+      }));
+    }
+
+    return {
+      supported,
+      async getAll() {
+        if (!supported) return [];
+        const result = await withStore("readonly", (store) => store.getAll());
+        return Array.isArray(result) ? result : [];
+      },
+      async put(entry) {
+        if (!supported) return entry;
+        return withStore("readwrite", (store) => store.put(entry));
+      },
+      async delete(id) {
+        if (!supported) return;
+        return withStore("readwrite", (store) => store.delete(id));
+      },
+      async get(id) {
+        if (!supported) return null;
+        return withStore("readonly", (store) => store.get(id));
+      }
+    };
+  })();
+
+  function populateLibraryCategoryFilter() {
+    if (!el.libraryCategoryFilter) return;
+    const current = state.libraryFilters.category || "all";
+    const options = [
+      `<option value="all">${t("libraryFilterAll")}</option>`,
+      ...CATEGORIES.filter((c) => c.id !== "any").map((c) => {
+        const label = curLang() === "es" ? c.es : c.en;
+        return `<option value="${c.id}">${label}</option>`;
+      }),
+    ];
+    el.libraryCategoryFilter.innerHTML = options.join("");
+    el.libraryCategoryFilter.value = current;
+  }
+
+  function formatTimestamp(ts) {
+    if (!ts) return "";
+    try {
+      return new Intl.DateTimeFormat(curLang(), {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }).format(new Date(ts));
+    } catch {
+      return new Date(ts).toLocaleString();
+    }
+  }
+
+  function applyLibraryFilters(items) {
+    const filters = state.libraryFilters;
+    let output = Array.isArray(items) ? [...items] : [];
+    if (filters.search) {
+      const needle = filters.search.toLowerCase();
+      output = output.filter((item) => {
+        const hay = `${item.characterName || ""} ${item.officialName || ""} ${item.summary || ""}`.toLowerCase();
+        return hay.includes(needle);
+      });
+    }
+    if (filters.category && filters.category !== "all") {
+      output = output.filter((item) => (item.category || "") === filters.category);
+    }
+    if (filters.sort === "oldest") {
+      output.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+    } else if (filters.sort === "az") {
+      output.sort((a, b) => (a.characterName || "").localeCompare(b.characterName || ""));
+    } else {
+      output.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+    }
+    return output;
+  }
+
+  function buildLibraryItemMarkup(entry) {
+    const catLabel = categoryLabelFor(entry.category || "any");
+    const dateLabel = formatTimestamp(entry.timestamp);
+    const summary = escapeHtml(entry.summary || buildCondensedMainOutput(entry.textEn || entry.text || ""));
+    const name = escapeHtml(entry.characterName || entry.officialName || entry.searchName || entry.id);
+    const fav = !!entry.favorite;
+    const favLabel = fav ? t("libraryActionUnfavorite") : t("libraryActionFavorite");
+    const favAction = fav ? "unfavorite" : "favorite";
+    return `
+      <li class="library-item" data-id="${entry.id}">
+        <div class="library-item-header">
+          <div>
+            <strong>${name}</strong>
+            <div class="charFact">${t("libraryTimePrefix")} · ${escapeHtml(catLabel)} · ${escapeHtml(dateLabel)}</div>
+          </div>
+          <div class="library-item-actions">
+            <button class="pill-btn primary" data-action="view">${t("libraryActionView")}</button>
+            <button class="pill-btn" data-action="${favAction}">${favLabel}</button>
+            <button class="pill-btn danger" data-action="delete">${t("libraryActionDelete")}</button>
+          </div>
+        </div>
+        <p class="charFact">${summary}</p>
+      </li>`;
+  }
+
+  function renderLibraryList() {
+    if (!el.libraryList) return;
+    const filtered = applyLibraryFilters(state.libraryItems);
+    el.libraryList.innerHTML = filtered.map(buildLibraryItemMarkup).join("");
+    if (el.libraryEmptyState) {
+      el.libraryEmptyState.style.display = filtered.length ? "none" : "block";
+      if (!filtered.length) {
+        el.libraryEmptyState.textContent = t("libraryEmpty");
+      }
+    }
+  }
+
+  function renderFavoritesList() {
+    if (!el.favoritesList) return;
+    const favorites = state.libraryItems.filter((item) => item.favorite);
+    el.favoritesList.innerHTML = favorites.map(buildLibraryItemMarkup).join("");
+    if (el.favoritesEmptyState) {
+      el.favoritesEmptyState.style.display = favorites.length ? "none" : "block";
+      if (!favorites.length) {
+        el.favoritesEmptyState.textContent = t("favoritesEmpty");
+      }
+    }
+  }
+
+  function upsertLibraryItem(entry) {
+    const idx = state.libraryItems.findIndex((item) => item.id === entry.id);
+    if (idx >= 0) {
+      state.libraryItems[idx] = entry;
+    } else {
+      state.libraryItems.push(entry);
+    }
+  }
+
+  function handleLibraryListClick(event) {
+    const actionBtn = event.target.closest("button[data-action]");
+    if (!actionBtn) return;
+    const itemEl = actionBtn.closest(".library-item");
+    if (!itemEl) return;
+    const id = itemEl.dataset.id;
+    const action = actionBtn.dataset.action;
+    const entry = state.libraryItems.find((item) => item.id === id);
+    if (!entry) return;
+
+    if (action === "view") {
+      setDetailFromEntry(entry, "library");
+      openDetailPanel();
+      return;
+    }
+
+    if (action === "favorite" || action === "unfavorite") {
+      entry.favorite = action === "favorite";
+      LibraryStore.put(entry).catch((err) => console.warn("Favorite toggle failed", err?.message));
+      upsertLibraryItem(entry);
+      renderLibraryList();
+      renderFavoritesList();
+      return;
+    }
+
+    if (action === "delete") {
+      state.libraryItems = state.libraryItems.filter((item) => item.id !== id);
+      LibraryStore.delete(id).catch((err) => console.warn("Delete failed", err?.message));
+      renderLibraryList();
+      renderFavoritesList();
+      return;
+    }
+  }
+
+  function bindLibraryUI() {
+    populateLibraryCategoryFilter();
+    if (el.librarySearchInput) {
+      el.librarySearchInput.placeholder = t("librarySearchPlaceholder");
+      el.librarySearchInput.addEventListener("input", (e) => {
+        state.libraryFilters.search = e.target.value.trim().toLowerCase();
+        renderLibraryList();
+      });
+    }
+    if (el.libraryCategoryFilter) {
+      el.libraryCategoryFilter.addEventListener("change", (e) => {
+        state.libraryFilters.category = e.target.value;
+        renderLibraryList();
+      });
+    }
+    if (el.librarySortSelect) {
+      el.librarySortSelect.addEventListener("change", (e) => {
+        state.libraryFilters.sort = e.target.value;
+        renderLibraryList();
+      });
+      el.librarySortSelect.value = state.libraryFilters.sort;
+      const sortOptions = {
+        recent: t("librarySortRecent"),
+        oldest: t("librarySortOldest"),
+        az: t("librarySortAZ"),
+      };
+      Array.from(el.librarySortSelect.options).forEach((opt) => {
+        if (sortOptions[opt.value]) opt.textContent = sortOptions[opt.value];
+      });
+    }
+    if (el.libraryList) {
+      el.libraryList.addEventListener("click", handleLibraryListClick);
+    }
+    if (el.favoritesList) {
+      el.favoritesList.addEventListener("click", handleLibraryListClick);
+    }
+  }
+
+  async function initLibrary() {
+    if (!LibraryStore.supported) {
+      state.libraryReady = false;
+      if (el.libraryEmptyState) {
+        el.libraryEmptyState.textContent = "IndexedDB is unavailable in this browser.";
+      }
+      return;
+    }
+    try {
+      const entries = await LibraryStore.getAll();
+      state.libraryItems = Array.isArray(entries) ? entries : [];
+      state.libraryReady = true;
+      renderLibraryList();
+      renderFavoritesList();
+    } catch (err) {
+      console.warn("Library init failed", err?.message);
+    }
   }
 
 
@@ -1144,6 +1552,84 @@ function updateCarouselFocus() {
     }
   }
 
+  function applyDetailImageFromState() {
+    if (!el.characterImg) return;
+    if (state.currentImageUrl) {
+      el.characterImg.src = state.currentImageUrl;
+      el.characterImg.style.display = "block";
+      el.characterImg.classList.add("is-visible");
+      el.characterImg.style.opacity = "1";
+    } else {
+      el.characterImg.removeAttribute("src");
+      el.characterImg.style.display = "none";
+    }
+  }
+
+  function setDetailFromEntry(entry, source = "library") {
+    if (!entry) return;
+    const detail = {
+      ...entry,
+      textEn: entry.textEn || entry.text || state.resultEn || "",
+      textEs: entry.textEs || state.resultEs || "",
+    };
+    state.detail = detail;
+    state.detailSource = source;
+    state.resultEn = detail.textEn || "";
+    state.resultEs = detail.textEs || "";
+    state.characterName = detail.characterName || detail.officialName || state.characterName;
+    state.officialName = detail.officialName || state.officialName;
+    state.characterUniverse = detail.universe || detail.metadata?.universe || state.characterUniverse;
+    state.lastCharacter = detail.searchName || state.lastCharacter;
+    state.currentImageUrl = detail.imageUrl || state.currentImageUrl;
+    applyDetailImageFromState();
+    renderResultForCurrentLang();
+  }
+
+  function buildEntryFromState(overrides = {}) {
+    if (!state.resultEn) return null;
+    return {
+      id: overrides.id || generateId(),
+      officialName: state.officialName,
+      characterName: state.characterName || state.officialName,
+      searchName: state.lastCharacter,
+      category: state.selectedCategory,
+      lang: curLang(),
+      timestamp: overrides.timestamp || Date.now(),
+      summary: buildCondensedMainOutput(state.resultEn),
+      textEn: state.resultEn,
+      textEs: state.resultEs,
+      universe: state.characterUniverse,
+      imageUrl: state.currentImageUrl,
+      favorite: overrides.favorite ?? false,
+      metadata: {
+        sessionId: state.sessionId,
+        categoryLabel: categoryLabelFor(state.selectedCategory),
+        lastPrompt: state.lastCharacter,
+      },
+    };
+  }
+
+  function upsertAndRenderEntry(entry) {
+    if (!entry) return;
+    upsertLibraryItem(entry);
+    renderLibraryList();
+    renderFavoritesList();
+  }
+
+  async function persistEntry(entry) {
+    if (!entry) return;
+    if (!LibraryStore.supported) {
+      upsertAndRenderEntry(entry);
+      return;
+    }
+    try {
+      await LibraryStore.put(entry);
+    } catch (err) {
+      console.warn("Library save failed", err?.message);
+    }
+    upsertAndRenderEntry(entry);
+  }
+
   // ===== Character image =====
   // OPTIMIZATION 3: Lazy load images with IntersectionObserver
   function initLazyLoadImage() {
@@ -1213,14 +1699,14 @@ function updateCarouselFocus() {
     const name = String(charName || "").trim();
     if (!name) {
       console.warn("setCharacterImage: No name provided");
-      return false;
+      return null;
     }
 
     try {
-        if (el.characterImg) {
-          el.characterImg.classList.remove("is-visible");
-          el.characterImg.style.opacity = "0";
-        }
+      if (el.characterImg) {
+        el.characterImg.classList.remove("is-visible");
+        el.characterImg.style.opacity = "0";
+      }
       showLoadingSpinner();
       const univ = String(universe || "").trim();
       if (!API_VALID) {
@@ -1231,44 +1717,45 @@ function updateCarouselFocus() {
       if (univ) {
         url += `&universe=${encodeURIComponent(univ)}`;
       }
-      
+
       console.log("Fetching image from:", url);
       const r = await safeFetch(url);
       const data = await r.json().catch(() => ({}));
       const imgUrl = String(data?.url || "");
-      
+
       console.log("Image response:", { ok: r.ok, url: imgUrl, data });
-      
+
       if (!r.ok || !imgUrl) {
         console.error("Image generation failed:", data?.details || data?.error || "unknown error");
         hideLoadingSpinner();
         throw new Error(data?.details || data?.error || "image generation failed");
       }
 
-      // OPTIMIZATION: Use lazy loading for image
-      el.characterImg.dataset.lazyImageUrl = `${API}${imgUrl}`;
+      const resolvedUrl = imgUrl.startsWith("http") ? imgUrl : `${API}${imgUrl}`;
+      el.characterImg.dataset.lazyImageUrl = resolvedUrl;
       el.characterImg.style.display = "block";
-      
-      // Trigger lazy loading and await the actual image load
-      const ok = await initLazyLoadImage();
-      
+
+      await initLazyLoadImage();
+      state.currentImageUrl = resolvedUrl;
+      if (state.detail) state.detail.imageUrl = resolvedUrl;
       console.log("Image queued for lazy loading");
-      return ok;
+      return resolvedUrl;
     } catch (err) {
       console.error("setCharacterImage error:", err.message);
       hideLoadingSpinner();
 
-      // Fallback: if backend failed, try serving a previously generated cached image from disk
       try {
-        const loaded = await tryLoadCachedGeneratedImage(name);
-        if (loaded) {
+        const fallbackUrl = await tryLoadCachedGeneratedImage(name);
+        if (fallbackUrl) {
           console.log("Fallback cached image loaded from /generated");
           hideLoadingSpinner();
           const frame = el.characterImg.closest('.imgFrame');
           if (frame) frame.classList.remove("spinning");
           el.characterImg.classList.add("is-visible");
           el.characterImg.style.opacity = "1";
-          return true;
+          state.currentImageUrl = fallbackUrl;
+          if (state.detail) state.detail.imageUrl = fallbackUrl;
+          return fallbackUrl;
         }
       } catch (e) {
         console.warn("Fallback cached image check failed:", e?.message || e);
@@ -1277,7 +1764,8 @@ function updateCarouselFocus() {
       el.characterImg.removeAttribute("src");
       el.characterImg.removeAttribute("data-lazy-image-url");
       el.characterImg.style.display = "none";
-      throw err; // Propagar error para que se maneje en flujo principal
+      state.currentImageUrl = "";
+      throw err;
     }
   }
 
@@ -1345,8 +1833,9 @@ function updateCarouselFocus() {
     
     // Update sheet labels for current language
     applyStaticText();
-    
-    if (!state.hasResult) {
+    const detail = state.detail;
+
+    if (!detail || (!detail.textEn && !detail.textEs)) {
       setOutput("");
       setNoteIconsInline([]);
       document.getElementById("charSheetName").textContent = "—";
@@ -1361,7 +1850,7 @@ function updateCarouselFocus() {
     }
 
     // Use appropriate language for rendering
-    const txt = lang === "es" ? (state.resultEs || state.resultEn) : state.resultEn;
+    const txt = lang === "es" ? (detail.textEs || detail.textEn) : (detail.textEn || detail.textEs);
     
     // For output box, show only the condensed aroma profile (not the whole result)
     const condensedOutput = buildCondensedMainOutput(txt || "");
@@ -1379,7 +1868,7 @@ function updateCarouselFocus() {
     document.getElementById("charSheetImpression").textContent = sheet.lastImpression || "—";
     
     // Set curiosity from result
-    setCuriosityForCharacter(state.lastCharacter);
+    setCuriosityForCharacter(detail.characterName || state.lastCharacter);
   }
 
   // ===== Actions =====
@@ -1466,13 +1955,9 @@ function updateCarouselFocus() {
 
       // Prepare tasks and wait before rendering
       const imagePromise = setCharacterImage(state.officialName, state.selectedCategory, state.characterUniverse)
-        .then((ok) => {
-          if (ok) console.log("Image generation completed");
-          return ok;
-        })
         .catch(imgErr => {
           console.error("Image generation failed:", imgErr.message);
-          return false;
+          return null;
         });
 
       const needsEs = curLang() === "es";
@@ -1482,16 +1967,23 @@ function updateCarouselFocus() {
 
       await Promise.all([imagePromise, translationPromise]);
 
+      const liveEntry = buildEntryFromState();
+      if (liveEntry) {
+        setDetailFromEntry(liveEntry, "live");
+        persistEntry(liveEntry);
+      }
+
       // Render together once everything is ready
       state.hasResult = true;
       console.log("Rendering results after all tasks ready...");
-      renderResultForCurrentLang();
+      setActiveView("search");
 
       // Clear search text after results are ready
       el.characterInput.value = "";
 
       // Marcar como completado
       setStatus("done");
+      openDetailPanel();
     } catch (e) {
       showError(String(e?.message || e));
       stopLoadingScreen();
