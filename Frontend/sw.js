@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v12-20260207-phase2";
+const CACHE_VERSION = "v13-20260207-phase2";
 const CACHE_NAME = `wts-cache-${CACHE_VERSION}`;
 const SHELL_URL = "/index.html";
 const CRITICAL_ASSETS = [
