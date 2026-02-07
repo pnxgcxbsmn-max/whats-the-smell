@@ -2529,18 +2529,18 @@ color: rgba(245,250,255,.96) !important;
   </script>
 
   <!-- Gateway module: defines GATEWAY global (must load first) -->
-  <script src="gateway.js?v=20260206a"></script>
+  <script src="gateway.js?v=20260207a"></script>
   <!-- Gate UI: access-gate.js -->
-  <script src="access-gate.js?v=20260206b"></script>
+  <script src="access-gate.js?v=20260207a"></script>
   <!-- html2canvas for feedback screenshots -->
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" defer></script>
   <!-- Main app: uses GATEWAY module -->
-  <script src="app.js?v=20260206a" defer></script>
+  <script src="app.js?v=20260207a" defer></script>
   <script>
     const ENABLE_SW = true;
     if (ENABLE_SW && "serviceWorker" in navigator) {
       window.addEventListener("load", () => {
-        navigator.serviceWorker.register("/sw.js?v=20260207")
+        navigator.serviceWorker.register("/sw.js?v=20260207a")
           .then(() => console.log("Service Worker registrado"))
           .catch(err => console.error("SW error", err));
       });
