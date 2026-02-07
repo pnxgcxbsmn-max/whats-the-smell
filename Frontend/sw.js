@@ -1,13 +1,17 @@
-const CACHE_VERSION = "v11-20260206-access-gate";
+const CACHE_VERSION = "v12-20260207-phase2";
 const CACHE_NAME = `wts-cache-${CACHE_VERSION}`;
+const SHELL_URL = "/index.html";
 const CRITICAL_ASSETS = [
   "/",
   "/index.html",
   "/gateway.js",
   "/app.js",
   "/access-gate.js",
-  "/manifest.json",
+  "/manifest.webmanifest",
   "/assets/brand/logo-en.png",
+  "/assets/brand/logo-es.png",
+  "/assets/pwa/icon-192.png",
+  "/assets/pwa/icon-512.png",
 ];
 
 // Network-first files (always check server first)
@@ -49,92 +53,69 @@ self.addEventListener("activate", (event) => {
 // OPTIMIZATION: Intelligent caching strategy
 self.addEventListener("fetch", (event) => {
   const { request } = event;
-  const url = new URL(request.url);
-
   if (request.method !== "GET") return;
 
-  if (url.hostname !== self.location.hostname && !url.hostname.includes("localhost")) {
-    return;
-  }
+  const url = new URL(request.url);
+  const sameOrigin = url.origin === self.location.origin || url.hostname.includes("localhost");
 
-  const pathname = url.pathname;
-  const isNetworkFirst = NETWORK_FIRST_FILES.some(file => pathname === file || pathname.endsWith(file));
-
-  // STRATEGY 0: Network-first for gateway/gate/app files (always fresh)
-  if (isNetworkFirst) {
-    event.respondWith(
-      fetch(request)
-        .then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            const responseToCache = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(request, responseToCache);
-            });
-          }
-          return networkResponse;
-        })
-        .catch(() => {
-          // Fallback to cache if network fails
-          return caches.match(request) || new Response("Offline", { status: 503 });
-        })
-    );
-    return;
-  }
-
-  // STRATEGY 1: Images - Cache first, fallback to network
-  if (/\.(webp|png|jpg|jpeg|gif|svg)$/i.test(pathname)) {
-    event.respondWith(
-      caches.match(request).then((response) => {
-        return (
-          response ||
-          fetch(request).then((networkResponse) => {
-            if (networkResponse && networkResponse.status === 200) {
-              const responseToCache = networkResponse.clone();
-              caches.open(CACHE_NAME).then((cache) => {
-                cache.put(request, responseToCache);
-              });
-            }
-            return networkResponse;
-          })
-        );
-      })
-    );
-  }
-  // STRATEGY 2: API calls - Network first, fallback to cache
-  else if (pathname.startsWith("/api/")) {
-    event.respondWith(
-      fetch(request)
-        .then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            const responseToCache = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(request, responseToCache);
-            });
-          }
-          return networkResponse;
-        })
-        .catch(() => {
-          return caches.match(request) || new Response("Offline", { status: 503 });
-        })
-    );
-  }
-  // STRATEGY 3: Other HTML/JS/CSS - Network first for fresh content
-  else {
+  if (request.mode === "navigate" && sameOrigin) {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          if (response && response.status === 200) {
-            const responseToCache = response.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(request, responseToCache);
-            });
-          }
+          caches.open(CACHE_NAME).then((cache) => cache.put(SHELL_URL, response.clone()));
           return response;
         })
-        .catch(() => {
-          return caches.match(request) || new Response("Offline", { status: 503 });
-        })
+        .catch(() => caches.match(SHELL_URL))
     );
+    return;
+  }
+
+  if (!sameOrigin) return;
+
+  const pathname = url.pathname;
+  const isNetworkFirst = NETWORK_FIRST_FILES.some((file) => pathname === file || pathname.endsWith(file));
+
+  if (isNetworkFirst) {
+    event.respondWith(networkFirst(request));
+    return;
+  }
+
+  if (/\.(webp|png|jpg|jpeg|gif|svg)$/i.test(pathname)) {
+    event.respondWith(cacheFirst(request));
+  } else if (pathname.startsWith("/api/")) {
+    event.respondWith(networkFirst(request));
+  } else {
+    event.respondWith(networkFirst(request));
+  }
+});
+
+function networkFirst(request) {
+  return fetch(request)
+    .then((networkResponse) => {
+      if (networkResponse && networkResponse.status === 200) {
+        const responseToCache = networkResponse.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(request, responseToCache));
+      }
+      return networkResponse;
+    })
+    .catch(() => caches.match(request) || new Response("Offline", { status: 503 }));
+}
+
+function cacheFirst(request) {
+  return caches.match(request).then((cached) => {
+    if (cached) return cached;
+    return fetch(request).then((networkResponse) => {
+      if (networkResponse && networkResponse.status === 200) {
+        caches.open(CACHE_NAME).then((cache) => cache.put(request, networkResponse.clone()));
+      }
+      return networkResponse;
+    });
+  });
+}
+
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "SKIP_WAITING") {
+    self.skipWaiting();
   }
 });
 

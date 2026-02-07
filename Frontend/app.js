@@ -88,6 +88,11 @@
     appTabs: document.getElementById("appTabs"),
     appViews: document.querySelectorAll(".app-view"),
     tabButtons: document.querySelectorAll(".app-tab-btn"),
+    navDrawerToggle: document.getElementById("navDrawerToggle"),
+    desktopDrawer: document.getElementById("desktopDrawer"),
+    drawerBackdrop: document.getElementById("drawerBackdrop"),
+    drawerButtons: document.querySelectorAll(".drawer-link"),
+    drawerHeading: document.getElementById("drawerHeading"),
     libraryList: document.getElementById("libraryList"),
     libraryEmptyState: document.getElementById("libraryEmptyState"),
     librarySearchInput: document.getElementById("librarySearchInput"),
@@ -99,10 +104,16 @@
     feedbackType: document.getElementById("feedbackType"),
     feedbackDescription: document.getElementById("feedbackDescription"),
     feedbackAttachScreenshot: document.getElementById("feedbackAttachScreenshot"),
+    feedbackContact: document.getElementById("feedbackContact"),
+    feedbackCaptureBtn: document.getElementById("feedbackCaptureBtn"),
+    feedbackClearScreenshot: document.getElementById("feedbackClearScreenshot"),
+    feedbackScreenshotLabel: document.getElementById("feedbackScreenshotLabel"),
     feedbackStatus: document.getElementById("feedbackStatus"),
     feedbackSubmitBtn: document.getElementById("feedbackSubmitBtn"),
     detailCard: document.getElementById("detailCard"),
     detailCloseBtn: document.getElementById("detailCloseBtn"),
+    favoriteToggle: document.getElementById("favoriteToggle"),
+    favoriteToggleLabel: document.getElementById("favoriteToggleLabel"),
   };
 
   // ===== Guard: if DOM missing, stop gracefully =====
@@ -205,19 +216,31 @@
       favoritesTitle: "Favorites",
       favoritesEmpty: "No favorites yet.",
       favoritesHint: "Mark any aroma as favorite to find it here.",
+      favoriteAdd: "Save favorite",
+      favoriteRemove: "Remove favorite",
       feedbackTitle: "Feedback & Bug report",
       feedbackTypeLabel: "Type",
       feedbackDescriptionLabel: "Description",
+      feedbackContactLabel: "Contact (optional)",
+      feedbackContactPlaceholder: "email or handle",
+      feedbackDescriptionPlaceholder: "Tell us what to improve or what went wrong",
       feedbackAttachLabel: "Attach screenshot automatically",
       feedbackSubmit: "Send",
       feedbackThanks: "Thanks! We'll review your note shortly.",
       feedbackError: "Couldn't send feedback. Try again in a moment.",
       feedbackMissingDescription: "Please describe your feedback.",
+      feedbackCapture: "Capture screenshot",
+      feedbackCaptureRemove: "Remove screenshot",
+      feedbackScreenshotReady: "Screenshot attached",
+      feedbackScreenshotEmpty: "No screenshot yet",
+      feedbackScreenshotFailed: "Capture failed. Try again.",
+      feedbackScreenshotTooLarge: "Screenshot too large. Try again.",
       libraryActionView: "Open",
       libraryActionFavorite: "Favorite",
       libraryActionUnfavorite: "Unfavorite",
       libraryActionDelete: "Delete",
       libraryTimePrefix: "Saved",
+      drawerHeading: "Navigate",
     },
     es: {
       appTitle: "¿A qué huele?",
@@ -259,21 +282,35 @@
       favoritesTitle: "Favoritos",
       favoritesEmpty: "Todavía no tienes favoritos.",
       favoritesHint: "Marca cualquier aroma como favorito para verlo aquí.",
+      favoriteAdd: "Guardar favorito",
+      favoriteRemove: "Quitar favorito",
       feedbackTitle: "Feedback y reporte de bugs",
       feedbackTypeLabel: "Tipo",
       feedbackDescriptionLabel: "Descripción",
+      feedbackContactLabel: "Contacto (opcional)",
+      feedbackContactPlaceholder: "correo o usuario",
+      feedbackDescriptionPlaceholder: "Cuéntanos qué mejorar o qué salió mal",
       feedbackAttachLabel: "Adjuntar captura automática",
       feedbackSubmit: "Enviar",
       feedbackThanks: "¡Gracias! Revisaremos tu nota pronto.",
       feedbackError: "No pudimos enviar el feedback. Intenta de nuevo.",
       feedbackMissingDescription: "Por favor describe tu feedback.",
+      feedbackCapture: "Capturar pantalla",
+      feedbackCaptureRemove: "Quitar captura",
+      feedbackScreenshotReady: "Captura lista",
+      feedbackScreenshotEmpty: "Sin captura",
+      feedbackScreenshotFailed: "Fallo al capturar. Intenta otra vez.",
+      feedbackScreenshotTooLarge: "La captura es muy pesada, vuelve a intentarlo.",
       libraryActionView: "Abrir",
       libraryActionFavorite: "Favorito",
       libraryActionUnfavorite: "Quitar favorito",
       libraryActionDelete: "Eliminar",
       libraryTimePrefix: "Guardado",
+      drawerHeading: "Navegación",
     },
   };
+
+  const MAX_SCREENSHOT_SIZE = 1_800_000; // ~1.5MB base64 payload guard
 
   // ===== Aroma Curiosities (Loading Screen) =====
   const AROMA_CURIOSITIES = {
@@ -354,12 +391,15 @@
     isInitialLoad: true, // Flag to skip animation on first load
     detail: null,
     detailSource: "none",
+    view: "search",
     activeView: "search",
     sessionId: (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : `wts-${Date.now()}`,
     libraryItems: [],
     libraryFilters: { search: "", category: "all", sort: "recent" },
     currentImageUrl: "",
     libraryReady: false,
+    drawerOpen: false,
+    feedbackScreenshot: null,
   };
 
   // ===== Helpers =====
@@ -599,29 +639,51 @@ async function tryLoadCachedGeneratedImage(charName) {
     document.documentElement.style.setProperty("--fieldW", `${total}px`);
   }
 
-  function setActiveView(view) {
-    if (!view) return;
-    state.activeView = view;
+  const VIEW_KEYS = ["search", "library", "favorites", "feedback"];
+
+  function setView(viewName) {
+    const next = VIEW_KEYS.includes(viewName) ? viewName : "search";
+    state.view = next;
+    state.activeView = next;
 
     if (el.appViews) {
       el.appViews.forEach((section) => {
-        const match = section.id === `view-${view}`;
+        const match = section.id === `view-${next}`;
         section.classList.toggle("is-active", match);
       });
     }
 
     if (el.tabButtons) {
       el.tabButtons.forEach((btn) => {
-        const match = (btn.dataset.view || "") === view;
+        const match = (btn.dataset.view || "") === next;
         btn.classList.toggle("is-active", match);
       });
     }
 
-    if (view !== "search") {
+    if (el.drawerButtons) {
+      el.drawerButtons.forEach((btn) => {
+        const match = (btn.dataset.view || "") === next;
+        btn.classList.toggle("is-active", match);
+      });
+    }
+
+    if (next === "library" && !state.libraryReady) {
+      initLibrary();
+    }
+
+    if (next !== "search") {
       closeDetailPanel();
     } else if (state.detail) {
       openDetailPanel();
     }
+
+    if (state.drawerOpen) {
+      closeDrawer();
+    }
+  }
+
+  function setActiveView(viewName) {
+    setView(viewName);
   }
 
   function bindTabs() {
@@ -629,9 +691,62 @@ async function tryLoadCachedGeneratedImage(charName) {
     el.tabButtons.forEach((btn) => {
       btn.addEventListener("click", () => {
         const view = btn.dataset.view || "search";
-        setActiveView(view);
+        setView(view);
       });
     });
+  }
+
+  function handleDrawerKeydown(event) {
+    if (event.key === "Escape" && state.drawerOpen) {
+      event.preventDefault();
+      closeDrawer();
+      el.navDrawerToggle?.focus();
+    }
+  }
+
+  function openDrawer() {
+    if (!el.desktopDrawer || state.drawerOpen) return;
+    state.drawerOpen = true;
+    el.desktopDrawer.classList.add("is-open");
+    el.desktopDrawer.setAttribute("aria-hidden", "false");
+    el.navDrawerToggle?.setAttribute("aria-expanded", "true");
+    document.body.classList.add("drawer-open");
+    document.addEventListener("keydown", handleDrawerKeydown);
+    const activeBtn = Array.from(el.drawerButtons || []).find((btn) => (btn.dataset.view || "") === state.view);
+    (activeBtn || (el.drawerButtons && el.drawerButtons[0]))?.focus?.();
+  }
+
+  function closeDrawer() {
+    if (!el.desktopDrawer) return;
+    state.drawerOpen = false;
+    el.desktopDrawer.classList.remove("is-open");
+    el.desktopDrawer.setAttribute("aria-hidden", "true");
+    el.navDrawerToggle?.setAttribute("aria-expanded", "false");
+    document.body.classList.remove("drawer-open");
+    document.removeEventListener("keydown", handleDrawerKeydown);
+  }
+
+  function toggleDrawer(forceState) {
+    const nextState = typeof forceState === "boolean" ? forceState : !state.drawerOpen;
+    if (nextState) openDrawer();
+    else closeDrawer();
+  }
+
+  function bindDrawerNav() {
+    if (el.navDrawerToggle) {
+      el.navDrawerToggle.addEventListener("click", () => toggleDrawer());
+    }
+    if (el.drawerBackdrop) {
+      el.drawerBackdrop.addEventListener("click", closeDrawer);
+    }
+    if (el.drawerButtons) {
+      el.drawerButtons.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const view = btn.dataset.view || "search";
+          setView(view);
+        });
+      });
+    }
   }
 
   function openDetailPanel() {
@@ -711,6 +826,55 @@ async function tryLoadCachedGeneratedImage(charName) {
     el.visualTitle2.textContent = t("scentNotesVisual");
     el.characterInput.placeholder = state.hasResult ? "" : t("placeholder");
 
+    const setText = (id, key) => {
+      const node = document.getElementById(id);
+      if (node) node.textContent = t(key);
+    };
+
+    setText("libraryTitle", "libraryTitle");
+    setText("favoritesTitle", "favoritesTitle");
+    setText("favoritesHint", "favoritesHint");
+    setText("feedbackTitle", "feedbackTitle");
+    setText("tabSearchLabel", "tabSearch");
+    setText("tabLibraryLabel", "tabLibrary");
+    setText("tabFavoritesLabel", "tabFavorites");
+    setText("tabFeedbackLabel", "tabFeedback");
+    setText("drawerHeading", "drawerHeading");
+    setText("drawerSearchLabel", "tabSearch");
+    setText("drawerLibraryLabel", "tabLibrary");
+    setText("drawerFavoritesLabel", "tabFavorites");
+    setText("drawerFeedbackLabel", "tabFeedback");
+
+    setText("feedbackTypeLabel", "feedbackTypeLabel");
+    setText("feedbackContactLabel", "feedbackContactLabel");
+    setText("feedbackDescriptionLabel", "feedbackDescriptionLabel");
+    setText("feedbackAttachLabel", "feedbackAttachLabel");
+
+    if (el.feedbackSubmitBtn) {
+      el.feedbackSubmitBtn.textContent = t("feedbackSubmit");
+    }
+    if (el.feedbackCaptureBtn) {
+      el.feedbackCaptureBtn.textContent = t("feedbackCapture");
+    }
+    if (el.feedbackClearScreenshot) {
+      el.feedbackClearScreenshot.textContent = t("feedbackCaptureRemove");
+    }
+    if (el.feedbackDescription) {
+      el.feedbackDescription.placeholder = t("feedbackDescriptionPlaceholder");
+    }
+    if (el.feedbackContact) {
+      el.feedbackContact.placeholder = t("feedbackContactPlaceholder");
+    }
+
+    if (el.librarySearchInput) {
+      el.librarySearchInput.placeholder = t("librarySearchPlaceholder");
+    }
+    populateLibraryCategoryFilter();
+    renderLibraryList();
+    renderFavoritesList();
+    updateScreenshotLabel();
+    updateFavoriteToggle();
+
     // Category display
     const label = categoryLabelFor(state.selectedCategory);
     el.categoryValue.textContent = label;
@@ -736,6 +900,7 @@ async function tryLoadCachedGeneratedImage(charName) {
   function setBusy(v) {
     state.busy = !!v;
     applyLocks();
+    updateFavoriteToggle();
   }
 
   function showLoadingSpinner() {
@@ -1242,6 +1407,53 @@ function updateCarouselFocus() {
     }
   }
 
+  function getLibraryEntryById(id) {
+    if (!id) return null;
+    return state.libraryItems.find((item) => item.id === id) || null;
+  }
+
+  function updateFavoriteToggle() {
+    if (!el.favoriteToggle) return;
+    const entry = state.detail;
+    if (!entry) {
+      el.favoriteToggle.classList.remove("is-visible", "is-favorite");
+      el.favoriteToggle.setAttribute("aria-pressed", "false");
+      el.favoriteToggle.disabled = true;
+      if (el.favoriteToggleLabel) {
+        el.favoriteToggleLabel.textContent = t("favoriteAdd");
+      }
+      return;
+    }
+
+    const storedEntry = entry.id ? getLibraryEntryById(entry.id) : null;
+    const isFavorite = storedEntry ? storedEntry.favorite : !!entry.favorite;
+    el.favoriteToggle.disabled = !!state.busy;
+    el.favoriteToggle.classList.add("is-visible");
+    el.favoriteToggle.classList.toggle("is-favorite", !!isFavorite);
+    el.favoriteToggle.setAttribute("aria-pressed", isFavorite ? "true" : "false");
+    if (el.favoriteToggleLabel) {
+      el.favoriteToggleLabel.textContent = isFavorite ? t("favoriteRemove") : t("favoriteAdd");
+    }
+  }
+
+  async function toggleFavoriteFromDetail() {
+    if (!state.detail) return;
+    let entry = state.detail.id ? getLibraryEntryById(state.detail.id) : null;
+    if (!entry) {
+      entry = buildEntryFromState({ id: state.detail.id });
+    }
+    if (!entry) return;
+    entry.favorite = !entry.favorite;
+    state.detail.favorite = entry.favorite;
+    await persistEntry(entry);
+    updateFavoriteToggle();
+  }
+
+  function bindFavoriteToggle() {
+    if (!el.favoriteToggle) return;
+    el.favoriteToggle.addEventListener("click", toggleFavoriteFromDetail);
+  }
+
   function upsertLibraryItem(entry) {
     const idx = state.libraryItems.findIndex((item) => item.id === entry.id);
     if (idx >= 0) {
@@ -1263,6 +1475,7 @@ function updateCarouselFocus() {
 
     if (action === "view") {
       setDetailFromEntry(entry, "library");
+      setView("search");
       openDetailPanel();
       return;
     }
@@ -1273,6 +1486,10 @@ function updateCarouselFocus() {
       upsertLibraryItem(entry);
       renderLibraryList();
       renderFavoritesList();
+      if (state.detail?.id === entry.id) {
+        state.detail.favorite = entry.favorite;
+        updateFavoriteToggle();
+      }
       return;
     }
 
@@ -1281,6 +1498,14 @@ function updateCarouselFocus() {
       LibraryStore.delete(id).catch((err) => console.warn("Delete failed", err?.message));
       renderLibraryList();
       renderFavoritesList();
+      if (state.detail?.id === id) {
+        state.detail = null;
+        state.hasResult = false;
+        updateFavoriteToggle();
+        closeDetailPanel();
+        setOutput("");
+        applyLocks();
+      }
       return;
     }
   }
@@ -1340,6 +1565,133 @@ function updateCarouselFocus() {
     } catch (err) {
       console.warn("Library init failed", err?.message);
     }
+  }
+
+  function setFeedbackStatus(message, mode = "info") {
+    if (!el.feedbackStatus) return;
+    el.feedbackStatus.textContent = message || "";
+    el.feedbackStatus.dataset.mode = mode;
+  }
+
+  function updateScreenshotLabel() {
+    if (!el.feedbackScreenshotLabel) return;
+    if (state.feedbackScreenshot) {
+      el.feedbackScreenshotLabel.textContent = t("feedbackScreenshotReady");
+      el.feedbackClearScreenshot?.removeAttribute("hidden");
+    } else {
+      el.feedbackScreenshotLabel.textContent = t("feedbackScreenshotEmpty");
+      el.feedbackClearScreenshot?.setAttribute("hidden", "true");
+    }
+  }
+
+  function clearFeedbackScreenshot() {
+    state.feedbackScreenshot = null;
+    updateScreenshotLabel();
+  }
+
+  async function captureFeedbackScreenshot() {
+    if (typeof html2canvas !== "function") {
+      throw new Error("missingLib");
+    }
+    const target = document.getElementById("appShell") || document.body;
+    const canvas = await html2canvas(target, {
+      backgroundColor: "#0b0f1a",
+      useCORS: true,
+      logging: false,
+      scale: Math.min(window.devicePixelRatio || 1.5, 2),
+    });
+    let quality = 0.8;
+    let dataUrl = canvas.toDataURL("image/jpeg", quality);
+    while (dataUrl.length > MAX_SCREENSHOT_SIZE && quality > 0.35) {
+      quality -= 0.1;
+      dataUrl = canvas.toDataURL("image/jpeg", quality);
+    }
+    if (dataUrl.length > MAX_SCREENSHOT_SIZE) {
+      throw new Error("tooLarge");
+    }
+    state.feedbackScreenshot = dataUrl;
+    updateScreenshotLabel();
+    return dataUrl;
+  }
+
+  function setFeedbackBusy(isBusy) {
+    if (!el.feedbackSubmitBtn) return;
+    el.feedbackSubmitBtn.disabled = !!isBusy;
+    el.feedbackSubmitBtn.textContent = isBusy ? `${t("feedbackSubmit")}…` : t("feedbackSubmit");
+  }
+
+  async function handleFeedbackSubmit(event) {
+    event.preventDefault();
+    if (!el.feedbackDescription) return;
+    const message = String(el.feedbackDescription.value || "").trim();
+    if (!message) {
+      setFeedbackStatus(t("feedbackMissingDescription"), "error");
+      el.feedbackDescription.focus();
+      return;
+    }
+    setFeedbackStatus("", "info");
+    setFeedbackBusy(true);
+
+    if (!state.feedbackScreenshot && el.feedbackAttachScreenshot?.checked) {
+      try {
+        await captureFeedbackScreenshot();
+      } catch (autoErr) {
+        if (autoErr?.message === "tooLarge") {
+          setFeedbackStatus(t("feedbackScreenshotTooLarge"), "error");
+        } else {
+          setFeedbackStatus(t("feedbackScreenshotFailed"), "error");
+        }
+      }
+    }
+
+    try {
+      const payload = {
+        message,
+        category: el.feedbackType?.value || "feedback",
+        contact: String(el.feedbackContact?.value || "").trim(),
+        url: window.location.href,
+        userAgent: navigator.userAgent,
+        ts: Date.now(),
+        locale: curLang(),
+        sessionId: state.sessionId,
+        screenshotBase64: state.feedbackScreenshot || null,
+      };
+      await apiPost("/api/feedback", payload);
+      setFeedbackStatus(t("feedbackThanks"), "success");
+      el.feedbackForm.reset();
+      clearFeedbackScreenshot();
+    } catch (err) {
+      console.error("Feedback submit failed", err?.message || err);
+      setFeedbackStatus(t("feedbackError"), "error");
+    } finally {
+      setFeedbackBusy(false);
+    }
+  }
+
+  function bindFeedbackForm() {
+    if (!el.feedbackForm) return;
+    el.feedbackForm.addEventListener("submit", handleFeedbackSubmit);
+    if (el.feedbackCaptureBtn) {
+      el.feedbackCaptureBtn.addEventListener("click", async () => {
+        try {
+          await captureFeedbackScreenshot();
+          setFeedbackStatus(t("feedbackScreenshotReady"), "success");
+        } catch (err) {
+          if (err?.message === "tooLarge") {
+            setFeedbackStatus(t("feedbackScreenshotTooLarge"), "error");
+          } else {
+            setFeedbackStatus(t("feedbackScreenshotFailed"), "error");
+          }
+        }
+      });
+    }
+    if (el.feedbackClearScreenshot) {
+      el.feedbackClearScreenshot.addEventListener("click", () => {
+        clearFeedbackScreenshot();
+        setFeedbackStatus(t("feedbackScreenshotEmpty"), "info");
+      });
+    }
+    updateScreenshotLabel();
   }
 
 
@@ -1572,6 +1924,7 @@ function updateCarouselFocus() {
       textEn: entry.textEn || entry.text || state.resultEn || "",
       textEs: entry.textEs || state.resultEs || "",
     };
+    detail.favorite = !!detail.favorite;
     state.detail = detail;
     state.detailSource = source;
     state.resultEn = detail.textEn || "";
@@ -1580,15 +1933,26 @@ function updateCarouselFocus() {
     state.officialName = detail.officialName || state.officialName;
     state.characterUniverse = detail.universe || detail.metadata?.universe || state.characterUniverse;
     state.lastCharacter = detail.searchName || state.lastCharacter;
+    if (detail.searchName) {
+      el.characterInput.value = detail.searchName;
+    }
     state.currentImageUrl = detail.imageUrl || state.currentImageUrl;
+    if (detail.category) {
+      setCategoryValue(detail.category);
+    }
     applyDetailImageFromState();
     renderResultForCurrentLang();
+    state.hasResult = true;
+    applyLocks();
+    updateFavoriteToggle();
   }
 
   function buildEntryFromState(overrides = {}) {
     if (!state.resultEn) return null;
+    const slugSource = state.officialName || state.characterName || state.lastCharacter || "entry";
+    const baseId = sanitizeFilename(`${slugSource}-${state.selectedCategory || "any"}`) || generateId();
     return {
-      id: overrides.id || generateId(),
+      id: overrides.id || baseId,
       officialName: state.officialName,
       characterName: state.characterName || state.officialName,
       searchName: state.lastCharacter,
@@ -1600,7 +1964,7 @@ function updateCarouselFocus() {
       textEs: state.resultEs,
       universe: state.characterUniverse,
       imageUrl: state.currentImageUrl,
-      favorite: overrides.favorite ?? false,
+      favorite: overrides.favorite ?? state.detail?.favorite ?? false,
       metadata: {
         sessionId: state.sessionId,
         categoryLabel: categoryLabelFor(state.selectedCategory),
@@ -1617,17 +1981,17 @@ function updateCarouselFocus() {
   }
 
   async function persistEntry(entry) {
-    if (!entry) return;
+    if (!entry) return null;
+    upsertAndRenderEntry(entry);
     if (!LibraryStore.supported) {
-      upsertAndRenderEntry(entry);
-      return;
+      return entry;
     }
     try {
       await LibraryStore.put(entry);
     } catch (err) {
       console.warn("Library save failed", err?.message);
     }
-    upsertAndRenderEntry(entry);
+    return entry;
   }
 
   // ===== Character image =====
@@ -1869,6 +2233,7 @@ function updateCarouselFocus() {
     
     // Set curiosity from result
     setCuriosityForCharacter(detail.characterName || state.lastCharacter);
+    updateFavoriteToggle();
   }
 
   // ===== Actions =====
@@ -1976,7 +2341,7 @@ function updateCarouselFocus() {
       // Render together once everything is ready
       state.hasResult = true;
       console.log("Rendering results after all tasks ready...");
-      setActiveView("search");
+      setView("search");
 
       // Clear search text after results are ready
       el.characterInput.value = "";
@@ -2023,6 +2388,10 @@ function updateCarouselFocus() {
     state.characterUniverse = "";
     state.currentErrorKey = null;
     state.selectedCategory = "any";
+    state.detail = null;
+    state.detailSource = "none";
+    state.currentImageUrl = "";
+    updateFavoriteToggle();
     
     // Limpiar inputs
     el.characterInput.value = "";
@@ -2171,9 +2540,21 @@ function updateCarouselFocus() {
     // Bindings
     bindLangSwitch();
     bindCategoryDropdown();
+    bindTabs();
+    bindDrawerNav();
+    bindLibraryUI();
+    bindFavoriteToggle();
+    bindFeedbackForm();
+    initLibrary();
 
     el.smellBtn.addEventListener("click", onGenerate);
     el.clearBtn.addEventListener("click", onClear);
+
+    if (el.detailCloseBtn) {
+      el.detailCloseBtn.addEventListener("click", closeDetailPanel);
+    }
+
+    setView(state.view);
 
     // Update button text and state when character input changes
     el.characterInput.addEventListener("input", () => {

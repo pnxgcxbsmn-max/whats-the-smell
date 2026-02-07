@@ -50,7 +50,7 @@ app.use(compression({
 }));
 
 app.use(cors({ origin: true }));
-app.use(express.json({ limit: "1mb" }));
+app.use(express.json({ limit: "5mb" }));
 
 // OPTIMIZATION: Static files with aggressive caching headers
 app.use(express.static(FRONTEND_DIR, {
@@ -87,6 +87,11 @@ const responseCache = new LRUCache({
 
 const inFlightImages = new Map();
 const inFlightResponses = new Map();
+const feedbackEntries = [];
+const feedbackRateLimit = new Map();
+const FEEDBACK_MAX_PER_WINDOW = 10;
+const FEEDBACK_WINDOW_MS = 60 * 60 * 1000;
+const MAX_FEEDBACK_SCREENSHOT = 2_000_000; // ~1.5MB base64
 
 // Carpeta para guardar y servir imágenes generadas
 const GENERATED_DIR = path.join(FRONTEND_DIR, "generated");
@@ -129,6 +134,29 @@ function savePersistedData() {
   } catch (e) {
     console.error("Error saving persisted data:", e.message);
   }
+}
+
+function canSubmitFeedback(ip) {
+  const safeIp = String(ip || "unknown");
+  const now = Date.now();
+  const bucket = feedbackRateLimit.get(safeIp) || {
+    count: 0,
+    reset: now + FEEDBACK_WINDOW_MS,
+  };
+
+  if (now > bucket.reset) {
+    bucket.count = 0;
+    bucket.reset = now + FEEDBACK_WINDOW_MS;
+  }
+
+  if (bucket.count >= FEEDBACK_MAX_PER_WINDOW) {
+    feedbackRateLimit.set(safeIp, bucket);
+    return false;
+  }
+
+  bucket.count += 1;
+  feedbackRateLimit.set(safeIp, bucket);
+  return true;
 }
 
 // Registrar nombre oficial de personaje
@@ -940,6 +968,47 @@ app.post("/api/translate", async (req, res) => {
       details: String(e?.message || e),
     });
   }
+});
+
+app.post("/api/feedback", (req, res) => {
+  const message = String(req.body?.message || "").trim();
+  if (message.length < 5) {
+    return res.status(400).json({ ok: false, error: "Message is required" });
+  }
+
+  const ip = req.headers["cf-connecting-ip"] || req.headers["x-forwarded-for"] || req.ip;
+  if (!canSubmitFeedback(ip)) {
+    return res.status(429).json({ ok: false, error: "Feedback rate limit reached" });
+  }
+
+  const screenshotBase64 = typeof req.body?.screenshotBase64 === "string" ? req.body.screenshotBase64.trim() : null;
+  if (screenshotBase64 && screenshotBase64.length > MAX_FEEDBACK_SCREENSHOT) {
+    return res.status(413).json({ ok: false, error: "Screenshot too large" });
+  }
+
+  const requestedCategory = String(req.body?.category || "feedback").toLowerCase();
+  const allowedCategories = new Set(["feedback", "bug", "idea", "other"]);
+  const safeCategory = allowedCategories.has(requestedCategory) ? requestedCategory : "feedback";
+
+  const entry = {
+    id: crypto.randomUUID ? crypto.randomUUID() : `fb-${Date.now()}`,
+    ts: Date.now(),
+    ipHash: sha1(String(ip || "")),
+    category: safeCategory,
+    contact: String(req.body?.contact || "").trim().slice(0, 180),
+    url: String(req.body?.url || "").trim().slice(0, 500),
+    userAgent: String(req.body?.userAgent || "").trim().slice(0, 500),
+    message: message.slice(0, 2000),
+    screenshot: screenshotBase64 || null,
+  };
+
+  feedbackEntries.push(entry);
+  if (feedbackEntries.length > 200) {
+    feedbackEntries.shift();
+  }
+
+  console.log(`[feedback] ${entry.category} :: ${entry.message.slice(0, 120)}${entry.message.length > 120 ? "…" : ""}`);
+  return res.json({ ok: true });
 });
 
 /* ========================= IA Image endpoint with Seedream 4.5 ========================= */
