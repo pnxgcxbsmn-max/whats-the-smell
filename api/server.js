@@ -300,7 +300,7 @@ async function fetchImageBuffer(url, timeoutMs = 12000) {
     let needsAuth = false;
     try {
       const parsed = new URL(String(url));
-      needsAuth = parsed.hostname.includes("aimlapi.com");
+      needsAuth = /aimlapi/i.test(parsed.hostname);
     } catch {
       needsAuth = false;
     }
@@ -422,6 +422,7 @@ async function generateImageWithOpenAI({ prompt, seed = 42, width = 768, height 
       const body = {
         model: model,
         prompt: sanitizedPrompt,
+        ...(model.startsWith("openai/") ? { response_format: "b64_json" } : {}),
       };
 
       console.log("AI-Image: Body enviado:", JSON.stringify({ model, promptLength: sanitizedPrompt.length }));
