@@ -757,6 +757,8 @@ async function tryLoadCachedGeneratedImage(charName) {
     if (state.drawerOpen) {
       closeDrawer();
     }
+
+    updateViewLayout();
   }
 
   function setActiveView(viewName) {
@@ -878,6 +880,12 @@ async function tryLoadCachedGeneratedImage(charName) {
   function closeDetailPanel() {
     document.body.classList.remove("show-detail");
     updateDetailActionsVisibility();
+  }
+
+  function updateViewLayout() {
+    if (!el.detailCard) return;
+    const showVisual = isDesktop() || state.view === "search";
+    el.detailCard.style.display = showVisual ? "" : "none";
   }
 
   function updateDetailActionsVisibility() {
@@ -1145,6 +1153,12 @@ function updateCarouselFocus() {
     // Generate carousel items
     renderCategoryCarousel();
     console.log(`[Carousel] Initialized with ${CATEGORIES.length} categories`);
+
+    if (el.categorySelect) {
+      el.categorySelect.addEventListener("change", (e) => {
+        setCategoryValue(e.target.value || "any");
+      });
+    }
 
     // Toggle "active" mode to show/hide carousel controls
     function setCategoryActive(on) {
@@ -1614,7 +1628,7 @@ function updateCarouselFocus() {
       .filter(Boolean)
       .join("");
     return `
-      <li class="library-item" data-id="${entry.id}">
+      <li class="library-item glass-card" data-id="${entry.id}">
         <div class="library-thumb">
           ${thumbImg || ""}
           <span class="thumb-badge">${escapeHtml(catLabel)}</span>
@@ -1626,9 +1640,9 @@ function updateCarouselFocus() {
             <div class="charFact">${t("libraryTimePrefix")} · ${escapeHtml(catLabel)} · ${escapeHtml(dateLabel)}</div>
           </div>
           <div class="library-item-actions">
-            <button class="pill-btn primary" data-action="view">${t("libraryActionView")}</button>
-            <button class="pill-btn" data-action="${favAction}">${favLabel}</button>
-            <button class="pill-btn danger" data-action="delete">${t("libraryActionDelete")}</button>
+            <button class="pill-btn primary glass-button" data-action="view">${t("libraryActionView")}</button>
+            <button class="pill-btn glass-button" data-action="${favAction}">${favLabel}</button>
+            <button class="pill-btn danger glass-button" data-action="delete">${t("libraryActionDelete")}</button>
           </div>
         </div>
         ${noteIcons ? `<div class="library-notes">${noteIcons}</div>` : ""}
@@ -2928,6 +2942,7 @@ function updateCarouselFocus() {
     }
     updateLibraryBadge();
     updateDetailActionsVisibility();
+    updateViewLayout();
 
     // Category init
     fillCategorySelectHidden();
@@ -2952,6 +2967,7 @@ function updateCarouselFocus() {
     DESKTOP_QUERY.addEventListener("change", () => {
       updateDetailActionsVisibility();
       closeDetailPanel();
+      updateViewLayout();
     });
 
     el.smellBtn.addEventListener("click", onGenerate);
