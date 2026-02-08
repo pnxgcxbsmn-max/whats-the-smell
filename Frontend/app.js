@@ -93,6 +93,9 @@
     drawerBackdrop: document.getElementById("drawerBackdrop"),
     drawerButtons: document.querySelectorAll(".drawer-link"),
     drawerHeading: document.getElementById("drawerHeading"),
+    imagePlaceholder: document.getElementById("imagePlaceholder"),
+    imagePlaceholderText: document.getElementById("imagePlaceholderText"),
+    imageRetryBtn: document.getElementById("imageRetryBtn"),
     libraryList: document.getElementById("libraryList"),
     libraryEmptyState: document.getElementById("libraryEmptyState"),
     librarySearchInput: document.getElementById("librarySearchInput"),
@@ -114,6 +117,7 @@
     detailCloseBtn: document.getElementById("detailCloseBtn"),
     favoriteToggle: document.getElementById("favoriteToggle"),
     favoriteToggleLabel: document.getElementById("favoriteToggleLabel"),
+    detailBackBtn: document.getElementById("detailBackBtn"),
   };
 
   // ===== Guard: if DOM missing, stop gracefully =====
@@ -241,6 +245,9 @@
       libraryActionDelete: "Delete",
       libraryTimePrefix: "Saved",
       drawerHeading: "Navigate",
+      imageRetry: "Retry image",
+      imageFailed: "Image not available right now.",
+      backToGenerator: "Back to generator",
     },
     es: {
       appTitle: "¿A qué huele?",
@@ -307,6 +314,9 @@
       libraryActionDelete: "Eliminar",
       libraryTimePrefix: "Guardado",
       drawerHeading: "Navegación",
+      imageRetry: "Reintentar imagen",
+      imageFailed: "Imagen no disponible ahora mismo.",
+      backToGenerator: "Volver al generador",
     },
   };
 
@@ -397,6 +407,7 @@
     libraryItems: [],
     libraryFilters: { search: "", category: "all", sort: "recent" },
     currentImageUrl: "",
+    currentImageError: "",
     libraryReady: false,
     drawerOpen: false,
     feedbackScreenshot: null,
@@ -844,6 +855,8 @@ async function tryLoadCachedGeneratedImage(charName) {
     setText("drawerLibraryLabel", "tabLibrary");
     setText("drawerFavoritesLabel", "tabFavorites");
     setText("drawerFeedbackLabel", "tabFeedback");
+    setText("detailBackBtn", "backToGenerator");
+    setText("imageRetryBtn", "imageRetry");
 
     setText("feedbackTypeLabel", "feedbackTypeLabel");
     setText("feedbackContactLabel", "feedbackContactLabel");
@@ -1242,7 +1255,27 @@ function updateCarouselFocus() {
     const DB_VERSION = 1;
     const STORE = "entries";
     const supported = typeof indexedDB !== "undefined";
+    const LS_KEY = "wts:favorites:v1";
     let dbPromise = null;
+
+    function lsReadAll() {
+      try {
+        const raw = localStorage.getItem(LS_KEY);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    }
+
+    function lsWriteAll(list) {
+      try {
+        localStorage.setItem(LS_KEY, JSON.stringify(list));
+      } catch (err) {
+        console.warn("LS persist failed", err?.message);
+      }
+    }
 
     function openDB() {
       if (!supported) {
@@ -1290,20 +1323,33 @@ function updateCarouselFocus() {
     return {
       supported,
       async getAll() {
-        if (!supported) return [];
+        if (!supported) return lsReadAll();
         const result = await withStore("readonly", (store) => store.getAll());
         return Array.isArray(result) ? result : [];
       },
       async put(entry) {
-        if (!supported) return entry;
+        if (!supported) {
+          const all = lsReadAll();
+          const idx = all.findIndex((e) => e.id === entry.id);
+          if (idx >= 0) all[idx] = entry;
+          else all.push(entry);
+          lsWriteAll(all);
+          return entry;
+        }
         return withStore("readwrite", (store) => store.put(entry));
       },
       async delete(id) {
-        if (!supported) return;
+        if (!supported) {
+          const all = lsReadAll().filter((e) => e.id !== id);
+          lsWriteAll(all);
+          return;
+        }
         return withStore("readwrite", (store) => store.delete(id));
       },
       async get(id) {
-        if (!supported) return null;
+        if (!supported) {
+          return lsReadAll().find((e) => e.id === id) || null;
+        }
         return withStore("readonly", (store) => store.get(id));
       }
     };
@@ -1366,8 +1412,14 @@ function updateCarouselFocus() {
     const fav = !!entry.favorite;
     const favLabel = fav ? t("libraryActionUnfavorite") : t("libraryActionFavorite");
     const favAction = fav ? "unfavorite" : "favorite";
+    const thumbUrl = entry.imageUrl ? escapeHtml(entry.imageUrl) : "";
+    const thumbImg = thumbUrl ? `<img src="${thumbUrl}" alt="${name}" loading="lazy" />` : "";
     return `
       <li class="library-item" data-id="${entry.id}">
+        <div class="library-thumb">
+          ${thumbImg || ""}
+          <span class="thumb-badge">${escapeHtml(catLabel)}</span>
+        </div>
         <div class="library-item-header">
           <div>
             <strong>${name}</strong>
@@ -1549,13 +1601,6 @@ function updateCarouselFocus() {
   }
 
   async function initLibrary() {
-    if (!LibraryStore.supported) {
-      state.libraryReady = false;
-      if (el.libraryEmptyState) {
-        el.libraryEmptyState.textContent = "IndexedDB is unavailable in this browser.";
-      }
-      return;
-    }
     try {
       const entries = await LibraryStore.getAll();
       state.libraryItems = Array.isArray(entries) ? entries : [];
@@ -1911,9 +1956,11 @@ function updateCarouselFocus() {
       el.characterImg.style.display = "block";
       el.characterImg.classList.add("is-visible");
       el.characterImg.style.opacity = "1";
+      hideImagePlaceholder();
     } else {
       el.characterImg.removeAttribute("src");
       el.characterImg.style.display = "none";
+      showImagePlaceholder(t("noImageYet"), true);
     }
   }
 
@@ -1959,6 +2006,7 @@ function updateCarouselFocus() {
       category: state.selectedCategory,
       lang: curLang(),
       timestamp: overrides.timestamp || Date.now(),
+      createdAt: overrides.timestamp || Date.now(),
       summary: buildCondensedMainOutput(state.resultEn),
       textEn: state.resultEn,
       textEs: state.resultEs,
@@ -1994,6 +2042,31 @@ function updateCarouselFocus() {
     return entry;
   }
 
+  function showImagePlaceholder(message, allowRetry = true) {
+    state.currentImageError = message || "";
+    if (el.imagePlaceholder) {
+      el.imagePlaceholder.classList.add("is-visible");
+      if (el.imagePlaceholderText) {
+        el.imagePlaceholderText.textContent = message || t("imageFailed");
+      }
+      if (el.imageRetryBtn) {
+        el.imageRetryBtn.disabled = !allowRetry;
+        el.imageRetryBtn.style.display = allowRetry ? "inline-flex" : "none";
+      }
+    }
+    if (el.characterImg) {
+      el.characterImg.classList.remove("is-visible");
+      el.characterImg.style.opacity = "0";
+    }
+  }
+
+  function hideImagePlaceholder() {
+    state.currentImageError = "";
+    if (el.imagePlaceholder) {
+      el.imagePlaceholder.classList.remove("is-visible");
+    }
+  }
+
   // ===== Character image =====
   // OPTIMIZATION 3: Lazy load images with IntersectionObserver
   function initLazyLoadImage() {
@@ -2014,6 +2087,7 @@ function updateCarouselFocus() {
           if (frame) frame.classList.remove("spinning");
           img.classList.add("is-visible");
           img.style.opacity = "1";
+          hideImagePlaceholder();
           img.onload = null;
           img.onerror = null;
           finalize(true);
@@ -2025,6 +2099,7 @@ function updateCarouselFocus() {
           img.style.opacity = "0";
           img.onload = null;
           img.onerror = null;
+          showImagePlaceholder(t("imageFailed"), true);
           finalize(false);
         };
       };
@@ -2085,19 +2160,22 @@ function updateCarouselFocus() {
       console.log("Fetching image from:", url);
       const r = await safeFetch(url);
       const data = await r.json().catch(() => ({}));
-      const imgUrl = String(data?.url || "");
+      const imgUrl = String(data?.imageUrl || data?.url || "");
 
-      console.log("Image response:", { ok: r.ok, url: imgUrl, data });
+      console.log("Image response:", { ok: r.ok && data?.ok !== false, url: imgUrl, provider: data?.provider });
 
-      if (!r.ok || !imgUrl) {
-        console.error("Image generation failed:", data?.details || data?.error || "unknown error");
+      if (!r.ok || data?.ok === false || !imgUrl) {
+        const errMsg = data?.details || data?.error || t("imageFailed");
+        console.error("Image generation failed:", errMsg);
         hideLoadingSpinner();
-        throw new Error(data?.details || data?.error || "image generation failed");
+        showImagePlaceholder(errMsg, true);
+        throw new Error(errMsg);
       }
 
       const resolvedUrl = imgUrl.startsWith("http") ? imgUrl : `${API}${imgUrl}`;
       el.characterImg.dataset.lazyImageUrl = resolvedUrl;
       el.characterImg.style.display = "block";
+      hideImagePlaceholder();
 
       await initLazyLoadImage();
       state.currentImageUrl = resolvedUrl;
@@ -2129,7 +2207,22 @@ function updateCarouselFocus() {
       el.characterImg.removeAttribute("data-lazy-image-url");
       el.characterImg.style.display = "none";
       state.currentImageUrl = "";
+      showImagePlaceholder(err?.message || t("imageFailed"), true);
       throw err;
+    }
+  }
+
+  async function retryCharacterImage() {
+    try {
+      const targetName = state.officialName || state.characterName || state.lastCharacter;
+      if (!targetName) {
+        showImagePlaceholder(t("enterCharacter"), false);
+        return;
+      }
+      showImagePlaceholder(t("working"), false);
+      await setCharacterImage(targetName, state.selectedCategory, state.characterUniverse);
+    } catch (err) {
+      console.warn("Retry image failed", err?.message || err);
     }
   }
 
@@ -2420,6 +2513,8 @@ function updateCarouselFocus() {
     el.characterImg.removeAttribute("src");
     el.characterImg.removeAttribute("data-lazy-image-url");
     el.characterImg.style.opacity = "0";
+    hideImagePlaceholder();
+    state.currentImageError = "";
     
     // Reset listas de aroma
     const noteElements = document.querySelectorAll("[id^='compImg']");
@@ -2536,6 +2631,7 @@ function updateCarouselFocus() {
     // Text
     applyStaticText();
     setCuriosityForCharacter(el.characterInput.value);
+    hideImagePlaceholder();
 
     // Bindings
     bindLangSwitch();
@@ -2550,9 +2646,29 @@ function updateCarouselFocus() {
     el.smellBtn.addEventListener("click", onGenerate);
     el.clearBtn.addEventListener("click", onClear);
 
+    if (el.imageRetryBtn) {
+      el.imageRetryBtn.addEventListener("click", retryCharacterImage);
+    }
+
+    if (el.detailBackBtn) {
+      el.detailBackBtn.addEventListener("click", () => {
+        closeDetailPanel();
+        setView("search");
+      });
+    }
+
     if (el.detailCloseBtn) {
       el.detailCloseBtn.addEventListener("click", closeDetailPanel);
     }
+
+    document.addEventListener("click", (evt) => {
+      if (!document.body.classList.contains("show-detail")) return;
+      const card = el.detailCard;
+      if (!card) return;
+      if (!card.contains(evt.target)) {
+        closeDetailPanel();
+      }
+    });
 
     setView(state.view);
 

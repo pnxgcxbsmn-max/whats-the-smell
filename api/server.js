@@ -871,23 +871,24 @@ app.post("/api/smell", async (req, res) => {
           method: 'GET',
           headers: { 'Content-Type': 'application/json' }
         }).then(r => r.json()).then(d => {
-          // Cache the image URL with the response for future use
-          if (d.url) {
+          const urlOut = d?.imageUrl || d?.url || null;
+          if (d?.ok && urlOut) {
             const imageTime = Date.now() - imageStart;
-            console.log("Smell: Imagen generada exitosamente:", d.url, `(${imageTime}ms)`);
+            console.log("[IMG] Smell: Imagen generada:", urlOut, `(${imageTime}ms)`, "provider=", d.provider || "unknown");
             timings.image_generation = imageTime;
-            // Store image URL in response cache for quick reuse
-            setCachedResponse(`${formalCharacterName}||image`, "en", d.url);
+            setCachedResponse(`${formalCharacterName}||image`, "en", urlOut);
+          } else {
+            console.warn("[IMG] Smell: respuesta de imagen sin url", d);
           }
-          return d.url;
+          return urlOut;
         }).catch(e => {
-          console.warn("Parallel image generation failed:", e.message);
+          console.warn("[IMG] Parallel image generation failed:", e.message);
           return null;
         });
         
         return imageUrl;
       } catch (e) {
-        console.warn("Image parallel generation error:", e.message);
+        console.warn("[IMG] Image parallel generation error:", e.message);
         return null;
       }
     })();
@@ -1040,12 +1041,11 @@ app.get("/api/ai-image", async (req, res) => {
     if (cached) {
       const cachedFile = path.join(GENERATED_DIR, path.basename(cached));
       if (fs.existsSync(cachedFile)) {
-        console.log("AI-Image: Usando imagen en cache:", cached);
-        return res.json({ url: cached, cached: true, provider: "cache" });
+        console.log("[IMG] Cache hit:", cached);
+        return res.json({ ok: true, imageUrl: cached, cached: true, provider: "cache" });
       } else {
-        // El archivo fue borrado, eliminar del caché en memoria
         imageCache.delete(cacheKey);
-        console.log("AI-Image: Archivo cacheado no existe, regenerando:", cached);
+        console.log("[IMG] Cache entry missing on disk, regenerating:", cached);
       }
     }
 
@@ -1062,22 +1062,22 @@ app.get("/api/ai-image", async (req, res) => {
     if (existingFiles.length > 0) {
       const existingFile = existingFiles[0];
       const localUrl = `/generated/${existingFile}`;
-      console.log("AI-Image: Archivo ya existe en disco, no regenerando:", localUrl);
-      imageCache.set(cacheKey, localUrl); // Restaurar a memoria también
-      return res.json({ url: localUrl, cached: true, provider: "disk" });
+      console.log("[IMG] Disk hit (rehydrate cache):", localUrl);
+      imageCache.set(cacheKey, localUrl);
+      return res.json({ ok: true, imageUrl: localUrl, cached: true, provider: "disk" });
     }
 
     // 2) In-flight de-dupe
     if (inFlightImages.has(cacheKey)) {
       const url = await inFlightImages.get(cacheKey);
-      return res.json({ url, cached: true, provider: "inflight" });
+      return res.json({ ok: true, imageUrl: url, cached: true, provider: "inflight" });
     }
 
     const job = (async () => {
       const prompt = buildImagePrompt(name, category, style, universe);
       const seed = Math.abs(parseInt(sha1(cacheKey).slice(0, 8), 16)) % 100000;
       
-      console.log("AI-Image: Generando imagen para:", name, "con prompt:", prompt.slice(0, 100));
+      console.log("[IMG] Generando imagen para:", name, "providerHint:", category, "prompt:", prompt.slice(0, 100));
       
       const gen = await generateImageWithOpenAI({
         prompt,
@@ -1106,7 +1106,7 @@ app.get("/api/ai-image", async (req, res) => {
       }
       
       // OPTIMIZATION 1: Compress to WebP and resize
-      console.log("AI-Image: Optimizando imagen a WebP (antes:", buf.length, "bytes)");
+      console.log("[IMG] Optimizando imagen a WebP (bytes:", buf.length, ")");
       try {
         buf = await optimizeImage(buf, 512, 75);
         console.log("AI-Image: Imagen lista para guardar");
@@ -1128,7 +1128,7 @@ app.get("/api/ai-image", async (req, res) => {
       
       fs.writeFileSync(abs, buf);
       const localUrl = `/generated/${file}`;
-      console.log("AI-Image: Imagen guardada en:", localUrl);
+      console.log("[IMG] Imagen guardada en:", localUrl);
       return { localUrl, provider: "openai-dalle3" };
     })();
 
@@ -1150,21 +1150,22 @@ app.get("/api/ai-image", async (req, res) => {
     try {
       const out = await job;
       imageCache.set(cacheKey, out.localUrl);
-      return res.json({ url: out.localUrl, cached: false, provider: out.provider });
+      return res.json({ ok: true, imageUrl: out.localUrl, cached: false, provider: out.provider });
     } catch (jobErr) {
       inFlightImages.delete(cacheKey);
       const errorMsg = String(jobErr?.message || jobErr);
-      console.error("AI-Image job execution failed:", errorMsg);
+      console.error("[IMG] Job failed:", errorMsg);
       
       // FALLBACK: Try to find any existing generated image to use as placeholder
-      console.log("AI-Image: Intentando encontrar imagen cached como fallback...");
+      console.log("[IMG] Intentando fallback desde generated/");
       const allGenerated = fs.readdirSync(GENERATED_DIR).filter(f => f.endsWith('.webp'));
       if (allGenerated.length > 0) {
         const fallbackFile = allGenerated[Math.floor(Math.random() * allGenerated.length)];
         const fallbackUrl = `/generated/${fallbackFile}`;
-        console.log("AI-Image: Usando imagen cached como fallback:", fallbackUrl);
+        console.log("[IMG] Fallback usando cache existente:", fallbackUrl);
         return res.json({ 
-          url: fallbackUrl, 
+          ok: true,
+          imageUrl: fallbackUrl, 
           cached: true, 
           provider: "fallback",
           warning: "Used cached image as fallback due to generation error"
@@ -1172,16 +1173,20 @@ app.get("/api/ai-image", async (req, res) => {
       }
       
       return res.status(500).json({
+        ok: false,
         error: "ai-image failed",
         details: errorMsg,
+        provider: "error"
       });
     }
   } catch (e) {
     const errorMsg = String(e?.message || e);
-    console.error("AI-Image endpoint error:", errorMsg);
+    console.error("[IMG] Endpoint error:", errorMsg);
     return res.status(500).json({
+      ok: false,
       error: "ai-image failed",
       details: errorMsg,
+      provider: "error"
     });
   }
 });
