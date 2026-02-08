@@ -93,6 +93,8 @@
     drawerBackdrop: document.getElementById("drawerBackdrop"),
     drawerButtons: document.querySelectorAll(".drawer-link"),
     drawerHeading: document.getElementById("drawerHeading"),
+    drawerLibraryBadge: document.getElementById("drawerLibraryBadge"),
+    tabLibraryBadge: document.getElementById("tabLibraryBadge"),
     imagePlaceholder: document.getElementById("imagePlaceholder"),
     imagePlaceholderText: document.getElementById("imagePlaceholderText"),
     imageRetryBtn: document.getElementById("imageRetryBtn"),
@@ -118,6 +120,8 @@
     favoriteToggle: document.getElementById("favoriteToggle"),
     favoriteToggleLabel: document.getElementById("favoriteToggleLabel"),
     detailBackBtn: document.getElementById("detailBackBtn"),
+    detailDownloadBtn: document.getElementById("detailDownloadBtn"),
+    detailCaptureBtn: document.getElementById("detailCaptureBtn"),
   };
 
   // ===== Guard: if DOM missing, stop gracefully =====
@@ -224,6 +228,11 @@
       favoriteRemove: "Remove favorite",
       feedbackTitle: "Feedback & Bug report",
       feedbackTypeLabel: "Type",
+      feedbackTypeBug: "Bug / Something broken",
+      feedbackTypeSuggestion: "Suggestion",
+      feedbackTypeImage: "Image quality",
+      feedbackTypeAroma: "Aroma quality",
+      feedbackTypeOther: "Other",
       feedbackDescriptionLabel: "Description",
       feedbackContactLabel: "Contact (optional)",
       feedbackContactPlaceholder: "email or handle",
@@ -246,8 +255,10 @@
       libraryTimePrefix: "Saved",
       drawerHeading: "Navigate",
       imageRetry: "Retry image",
-      imageFailed: "Image not available right now.",
+      imageFailed: "Premium placeholder active.",
       backToGenerator: "Back to generator",
+      detailDownload: "Download",
+      detailCapture: "Capture",
     },
     es: {
       appTitle: "¿A qué huele?",
@@ -293,6 +304,11 @@
       favoriteRemove: "Quitar favorito",
       feedbackTitle: "Feedback y reporte de bugs",
       feedbackTypeLabel: "Tipo",
+      feedbackTypeBug: "Bug / Algo no funciona",
+      feedbackTypeSuggestion: "Sugerencia",
+      feedbackTypeImage: "Calidad de imagen",
+      feedbackTypeAroma: "Calidad del aroma",
+      feedbackTypeOther: "Otro",
       feedbackDescriptionLabel: "Descripción",
       feedbackContactLabel: "Contacto (opcional)",
       feedbackContactPlaceholder: "correo o usuario",
@@ -315,12 +331,15 @@
       libraryTimePrefix: "Guardado",
       drawerHeading: "Navegación",
       imageRetry: "Reintentar imagen",
-      imageFailed: "Imagen no disponible ahora mismo.",
+      imageFailed: "Placeholder premium activo.",
       backToGenerator: "Volver al generador",
+      detailDownload: "Descargar",
+      detailCapture: "Capturar",
     },
   };
 
   const MAX_SCREENSHOT_SIZE = 1_800_000; // ~1.5MB base64 payload guard
+  const LIBRARY_BADGE_KEY = "wts:library:badge";
 
   // ===== Aroma Curiosities (Loading Screen) =====
   const AROMA_CURIOSITIES = {
@@ -409,6 +428,7 @@
     currentImageUrl: "",
     currentImageError: "",
     libraryReady: false,
+    libraryHasNew: false,
     drawerOpen: false,
     feedbackScreenshot: null,
   };
@@ -423,6 +443,17 @@ function sanitizeFilename(name) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 50);
+}
+
+function normalizeKey(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+function buildLibraryKey(name, category) {
+  return `lib::v1::${normalizeKey(name)}::${normalizeKey(category || "any")}`;
 }
 
 function escapeHtml(str) {
@@ -652,6 +683,32 @@ async function tryLoadCachedGeneratedImage(charName) {
 
   const VIEW_KEYS = ["search", "library", "favorites", "feedback"];
 
+  function updateLibraryBadge() {
+    const show = !!state.libraryHasNew;
+    if (el.drawerLibraryBadge) {
+      el.drawerLibraryBadge.classList.toggle("is-active", show);
+    }
+    if (el.tabLibraryBadge) {
+      el.tabLibraryBadge.classList.toggle("is-active", show);
+    }
+  }
+
+  function markLibraryBadge() {
+    state.libraryHasNew = true;
+    try {
+      localStorage.setItem(LIBRARY_BADGE_KEY, "1");
+    } catch {}
+    updateLibraryBadge();
+  }
+
+  function clearLibraryBadge() {
+    state.libraryHasNew = false;
+    try {
+      localStorage.removeItem(LIBRARY_BADGE_KEY);
+    } catch {}
+    updateLibraryBadge();
+  }
+
   function setView(viewName) {
     const next = VIEW_KEYS.includes(viewName) ? viewName : "search";
     state.view = next;
@@ -680,6 +737,10 @@ async function tryLoadCachedGeneratedImage(charName) {
 
     if (next === "library" && !state.libraryReady) {
       initLibrary();
+    }
+
+    if (next === "library") {
+      clearLibraryBadge();
     }
 
     if (next !== "search") {
@@ -760,8 +821,40 @@ async function tryLoadCachedGeneratedImage(charName) {
     }
   }
 
-  function openDetailPanel() {
+  function animateDetailLift(originEl) {
+    if (!originEl || !document.body) return;
+    const rect = originEl.getBoundingClientRect();
+    const clone = document.createElement("div");
+    clone.className = "detail-lift-clone";
+    clone.style.left = `${rect.left}px`;
+    clone.style.top = `${rect.top}px`;
+    clone.style.width = `${rect.width}px`;
+    clone.style.height = `${rect.height}px`;
+    const img = originEl.querySelector("img");
+    if (img && img.src) {
+      clone.style.backgroundImage = `url("${img.src}")`;
+    }
+    document.body.appendChild(clone);
+
+    requestAnimationFrame(() => {
+      const targetWidth = Math.min(window.innerWidth - 32, 980);
+      const targetHeight = Math.min(window.innerHeight - 40, 720);
+      const targetLeft = (window.innerWidth - targetWidth) / 2;
+      const targetTop = (window.innerHeight - targetHeight) / 2;
+      clone.style.transform = `translate(${targetLeft - rect.left}px, ${targetTop - rect.top}px) scale(${targetWidth / rect.width}, ${targetHeight / rect.height})`;
+      clone.style.opacity = "0";
+    });
+
+    clone.addEventListener("transitionend", () => clone.remove(), { once: true });
+  }
+
+  function openDetailPanel(originEl = null) {
     document.body.classList.add("show-detail");
+    document.body.classList.add("detail-animating");
+    if (originEl) {
+      animateDetailLift(originEl);
+    }
+    setTimeout(() => document.body.classList.remove("detail-animating"), 420);
   }
 
   function closeDetailPanel() {
@@ -857,8 +950,15 @@ async function tryLoadCachedGeneratedImage(charName) {
     setText("drawerFeedbackLabel", "tabFeedback");
     setText("detailBackBtn", "backToGenerator");
     setText("imageRetryBtn", "imageRetry");
+    setText("detailDownloadBtn", "detailDownload");
+    setText("detailCaptureBtn", "detailCapture");
 
     setText("feedbackTypeLabel", "feedbackTypeLabel");
+    setText("feedbackTypeBug", "feedbackTypeBug");
+    setText("feedbackTypeSuggestion", "feedbackTypeSuggestion");
+    setText("feedbackTypeImage", "feedbackTypeImage");
+    setText("feedbackTypeAroma", "feedbackTypeAroma");
+    setText("feedbackTypeOther", "feedbackTypeOther");
     setText("feedbackContactLabel", "feedbackContactLabel");
     setText("feedbackDescriptionLabel", "feedbackDescriptionLabel");
     setText("feedbackAttachLabel", "feedbackAttachLabel");
@@ -1252,15 +1352,24 @@ function updateCarouselFocus() {
 
   const LibraryStore = (() => {
     const DB_NAME = "wtsLibrary";
-    const DB_VERSION = 1;
+    const DB_VERSION = 2;
     const STORE = "entries";
     const supported = typeof indexedDB !== "undefined";
-    const LS_KEY = "wts:favorites:v1";
+    const LS_KEY = "wts:library:v1";
+    const LEGACY_LS_KEY = "wts:favorites:v1";
     let dbPromise = null;
 
     function lsReadAll() {
       try {
-        const raw = localStorage.getItem(LS_KEY);
+        let raw = localStorage.getItem(LS_KEY);
+        if (!raw) {
+          const legacyRaw = localStorage.getItem(LEGACY_LS_KEY);
+          if (legacyRaw) {
+            localStorage.setItem(LS_KEY, legacyRaw);
+            localStorage.removeItem(LEGACY_LS_KEY);
+            raw = legacyRaw;
+          }
+        }
         if (!raw) return [];
         const parsed = JSON.parse(raw);
         return Array.isArray(parsed) ? parsed : [];
@@ -1288,8 +1397,16 @@ function updateCarouselFocus() {
           const db = event.target.result;
           if (!db.objectStoreNames.contains(STORE)) {
             const store = db.createObjectStore(STORE, { keyPath: "id" });
-            store.createIndex("byFavorite", "favorite", { unique: false });
-            store.createIndex("byTimestamp", "timestamp", { unique: false });
+            store.createIndex("byFavorite", "isFavorite", { unique: false });
+            store.createIndex("byTimestamp", "createdAt", { unique: false });
+          } else {
+            const store = event.target.transaction.objectStore(STORE);
+            if (!store.indexNames.contains("byFavorite")) {
+              store.createIndex("byFavorite", "isFavorite", { unique: false });
+            }
+            if (!store.indexNames.contains("byTimestamp")) {
+              store.createIndex("byTimestamp", "createdAt", { unique: false });
+            }
           }
         };
         request.onsuccess = () => resolve(request.result);
@@ -1328,15 +1445,16 @@ function updateCarouselFocus() {
         return Array.isArray(result) ? result : [];
       },
       async put(entry) {
+        const normalized = normalizeLibraryEntry(entry);
         if (!supported) {
           const all = lsReadAll();
-          const idx = all.findIndex((e) => e.id === entry.id);
-          if (idx >= 0) all[idx] = entry;
-          else all.push(entry);
+          const idx = all.findIndex((e) => e.id === normalized.id);
+          if (idx >= 0) all[idx] = normalized;
+          else all.push(normalized);
           lsWriteAll(all);
-          return entry;
+          return normalized;
         }
-        return withStore("readwrite", (store) => store.put(entry));
+        return withStore("readwrite", (store) => store.put(normalized));
       },
       async delete(id) {
         if (!supported) {
@@ -1354,6 +1472,34 @@ function updateCarouselFocus() {
       }
     };
   })();
+
+  function normalizeLibraryEntry(entry) {
+    const safeEntry = entry && typeof entry === "object" ? { ...entry } : {};
+    const name = safeEntry.name || safeEntry.characterName || safeEntry.officialName || safeEntry.searchName || "";
+    const category = safeEntry.category || "any";
+    const createdAt = safeEntry.createdAt || safeEntry.timestamp || Date.now();
+    const isFavorite = safeEntry.isFavorite ?? safeEntry.favorite ?? false;
+    const notes = Array.isArray(safeEntry.notes) && safeEntry.notes.length
+      ? safeEntry.notes
+      : parseNotesFromResult(safeEntry.textEn || safeEntry.text || "");
+    const icons = Array.isArray(safeEntry.icons) && safeEntry.icons.length
+      ? safeEntry.icons
+      : notes.map(noteToIcon).filter(Boolean);
+
+    return {
+      ...safeEntry,
+      id: safeEntry.id || sanitizeFilename(`${name}-${category}`) || generateId(),
+      key: safeEntry.key || buildLibraryKey(name, category),
+      name,
+      category,
+      notes,
+      icons,
+      imageUrl: safeEntry.imageUrl || "",
+      createdAt,
+      isFavorite,
+      favorite: isFavorite,
+    };
+  }
 
   function populateLibraryCategoryFilter() {
     if (!el.libraryCategoryFilter) return;
@@ -1387,7 +1533,7 @@ function updateCarouselFocus() {
     if (filters.search) {
       const needle = filters.search.toLowerCase();
       output = output.filter((item) => {
-        const hay = `${item.characterName || ""} ${item.officialName || ""} ${item.summary || ""}`.toLowerCase();
+        const hay = `${item.name || ""} ${item.characterName || ""} ${item.officialName || ""} ${item.summary || ""}`.toLowerCase();
         return hay.includes(needle);
       });
     }
@@ -1395,30 +1541,40 @@ function updateCarouselFocus() {
       output = output.filter((item) => (item.category || "") === filters.category);
     }
     if (filters.sort === "oldest") {
-      output.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+      output.sort((a, b) => (a.createdAt || a.timestamp || 0) - (b.createdAt || b.timestamp || 0));
     } else if (filters.sort === "az") {
-      output.sort((a, b) => (a.characterName || "").localeCompare(b.characterName || ""));
+      output.sort((a, b) => (a.name || a.characterName || "").localeCompare(b.name || b.characterName || ""));
     } else {
-      output.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+      output.sort((a, b) => (b.createdAt || b.timestamp || 0) - (a.createdAt || a.timestamp || 0));
     }
     return output;
   }
 
   function buildLibraryItemMarkup(entry) {
     const catLabel = categoryLabelFor(entry.category || "any");
-    const dateLabel = formatTimestamp(entry.timestamp);
+    const dateLabel = formatTimestamp(entry.createdAt || entry.timestamp);
     const summary = escapeHtml(entry.summary || buildCondensedMainOutput(entry.textEn || entry.text || ""));
     const name = escapeHtml(entry.characterName || entry.officialName || entry.searchName || entry.id);
-    const fav = !!entry.favorite;
+    const fav = !!(entry.isFavorite ?? entry.favorite);
     const favLabel = fav ? t("libraryActionUnfavorite") : t("libraryActionFavorite");
     const favAction = fav ? "unfavorite" : "favorite";
     const thumbUrl = entry.imageUrl ? escapeHtml(entry.imageUrl) : "";
     const thumbImg = thumbUrl ? `<img src="${thumbUrl}" alt="${name}" loading="lazy" />` : "";
+    const notes = Array.isArray(entry.notes) && entry.notes.length ? entry.notes : [];
+    const noteIcons = notes
+      .slice(0, 4)
+      .map((note) => {
+        const icon = noteToIcon(note);
+        return icon ? `<span class="library-note" style="--note-icon:url('${icon}')" aria-hidden="true"></span>` : "";
+      })
+      .filter(Boolean)
+      .join("");
     return `
       <li class="library-item" data-id="${entry.id}">
         <div class="library-thumb">
           ${thumbImg || ""}
           <span class="thumb-badge">${escapeHtml(catLabel)}</span>
+          <button class="fav-heart ${fav ? "is-favorite" : ""}" data-action="${favAction}" aria-label="${favLabel}">♥</button>
         </div>
         <div class="library-item-header">
           <div>
@@ -1431,6 +1587,7 @@ function updateCarouselFocus() {
             <button class="pill-btn danger" data-action="delete">${t("libraryActionDelete")}</button>
           </div>
         </div>
+        ${noteIcons ? `<div class="library-notes">${noteIcons}</div>` : ""}
         <p class="charFact">${summary}</p>
       </li>`;
   }
@@ -1449,7 +1606,7 @@ function updateCarouselFocus() {
 
   function renderFavoritesList() {
     if (!el.favoritesList) return;
-    const favorites = state.libraryItems.filter((item) => item.favorite);
+    const favorites = state.libraryItems.filter((item) => item.isFavorite ?? item.favorite);
     el.favoritesList.innerHTML = favorites.map(buildLibraryItemMarkup).join("");
     if (el.favoritesEmptyState) {
       el.favoritesEmptyState.style.display = favorites.length ? "none" : "block";
@@ -1478,7 +1635,7 @@ function updateCarouselFocus() {
     }
 
     const storedEntry = entry.id ? getLibraryEntryById(entry.id) : null;
-    const isFavorite = storedEntry ? storedEntry.favorite : !!entry.favorite;
+    const isFavorite = storedEntry ? (storedEntry.isFavorite ?? storedEntry.favorite) : !!entry.favorite;
     el.favoriteToggle.disabled = !!state.busy;
     el.favoriteToggle.classList.add("is-visible");
     el.favoriteToggle.classList.toggle("is-favorite", !!isFavorite);
@@ -1495,8 +1652,10 @@ function updateCarouselFocus() {
       entry = buildEntryFromState({ id: state.detail.id });
     }
     if (!entry) return;
-    entry.favorite = !entry.favorite;
-    state.detail.favorite = entry.favorite;
+    const nextFav = !(entry.isFavorite ?? entry.favorite);
+    entry.isFavorite = nextFav;
+    entry.favorite = nextFav;
+    state.detail.favorite = nextFav;
     await persistEntry(entry);
     updateFavoriteToggle();
   }
@@ -1528,12 +1687,15 @@ function updateCarouselFocus() {
     if (action === "view") {
       setDetailFromEntry(entry, "library");
       setView("search");
-      openDetailPanel();
+      const thumb = itemEl.querySelector(".library-thumb");
+      openDetailPanel(thumb);
       return;
     }
 
     if (action === "favorite" || action === "unfavorite") {
-      entry.favorite = action === "favorite";
+      const nextFav = action === "favorite";
+      entry.isFavorite = nextFav;
+      entry.favorite = nextFav;
       LibraryStore.put(entry).catch((err) => console.warn("Favorite toggle failed", err?.message));
       upsertLibraryItem(entry);
       renderLibraryList();
@@ -1603,7 +1765,7 @@ function updateCarouselFocus() {
   async function initLibrary() {
     try {
       const entries = await LibraryStore.getAll();
-      state.libraryItems = Array.isArray(entries) ? entries : [];
+      state.libraryItems = Array.isArray(entries) ? entries.map(normalizeLibraryEntry) : [];
       state.libraryReady = true;
       renderLibraryList();
       renderFavoritesList();
@@ -1690,9 +1852,11 @@ function updateCarouselFocus() {
     }
 
     try {
+      const selectedType = document.querySelector('input[name="feedbackType"]:checked');
+      const feedbackCategory = selectedType ? selectedType.value : "feedback";
       const payload = {
         message,
-        category: el.feedbackType?.value || "feedback",
+        category: feedbackCategory,
         contact: String(el.feedbackContact?.value || "").trim(),
         url: window.location.href,
         userAgent: navigator.userAgent,
@@ -1715,7 +1879,18 @@ function updateCarouselFocus() {
 
   function bindFeedbackForm() {
     if (!el.feedbackForm) return;
+    const syncChips = () => {
+      document.querySelectorAll(".chip").forEach((label) => {
+        const input = label.querySelector("input");
+        label.classList.toggle("is-checked", !!input?.checked);
+      });
+    };
+
     el.feedbackForm.addEventListener("submit", handleFeedbackSubmit);
+    document.querySelectorAll('input[name="feedbackType"]').forEach((input) => {
+      input.addEventListener("change", syncChips);
+    });
+    syncChips();
     if (el.feedbackCaptureBtn) {
       el.feedbackCaptureBtn.addEventListener("click", async () => {
         try {
@@ -1737,6 +1912,62 @@ function updateCarouselFocus() {
       });
     }
     updateScreenshotLabel();
+  }
+
+  async function captureDetailCanvas() {
+    if (typeof html2canvas !== "function") {
+      throw new Error("missingLib");
+    }
+    const target = el.detailCard || document.body;
+    return html2canvas(target, {
+      backgroundColor: "#0b0f1a",
+      useCORS: true,
+      logging: false,
+      scale: Math.min(window.devicePixelRatio || 1.5, 2),
+    });
+  }
+
+  async function handleDetailDownload() {
+    try {
+      const canvas = await captureDetailCanvas();
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png", 0.92));
+      if (!blob) throw new Error("captureFailed");
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `wts-card-${Date.now()}.png`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.warn("Detail download failed", err?.message || err);
+      showImagePlaceholder(t("imageFailed"), true);
+    }
+  }
+
+  async function handleDetailCapture() {
+    try {
+      const canvas = await captureDetailCanvas();
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png", 0.92));
+      if (!blob) throw new Error("captureFailed");
+      const file = new File([blob], `wts-card-${Date.now()}.png`, { type: "image/png" });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: "What's the Smell?" });
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = file.name;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.warn("Detail capture failed", err?.message || err);
+      showImagePlaceholder(t("imageFailed"), true);
+    }
   }
 
 
@@ -1971,12 +2202,12 @@ function updateCarouselFocus() {
       textEn: entry.textEn || entry.text || state.resultEn || "",
       textEs: entry.textEs || state.resultEs || "",
     };
-    detail.favorite = !!detail.favorite;
+    detail.favorite = !!(detail.isFavorite ?? detail.favorite);
     state.detail = detail;
     state.detailSource = source;
     state.resultEn = detail.textEn || "";
     state.resultEs = detail.textEs || "";
-    state.characterName = detail.characterName || detail.officialName || state.characterName;
+    state.characterName = detail.characterName || detail.name || detail.officialName || state.characterName;
     state.officialName = detail.officialName || state.officialName;
     state.characterUniverse = detail.universe || detail.metadata?.universe || state.characterUniverse;
     state.lastCharacter = detail.searchName || state.lastCharacter;
@@ -1998,12 +2229,20 @@ function updateCarouselFocus() {
     if (!state.resultEn) return null;
     const slugSource = state.officialName || state.characterName || state.lastCharacter || "entry";
     const baseId = sanitizeFilename(`${slugSource}-${state.selectedCategory || "any"}`) || generateId();
+    const notes = parseNotesFromResult(state.resultEn || "");
+    const icons = notes.map(noteToIcon).filter(Boolean);
+    const name = state.characterName || state.officialName || slugSource;
+    const category = state.selectedCategory || "any";
     return {
       id: overrides.id || baseId,
+      key: buildLibraryKey(name, category),
+      name,
+      notes,
+      icons,
       officialName: state.officialName,
       characterName: state.characterName || state.officialName,
       searchName: state.lastCharacter,
-      category: state.selectedCategory,
+      category,
       lang: curLang(),
       timestamp: overrides.timestamp || Date.now(),
       createdAt: overrides.timestamp || Date.now(),
@@ -2012,7 +2251,8 @@ function updateCarouselFocus() {
       textEs: state.resultEs,
       universe: state.characterUniverse,
       imageUrl: state.currentImageUrl,
-      favorite: overrides.favorite ?? state.detail?.favorite ?? false,
+      isFavorite: overrides.isFavorite ?? overrides.favorite ?? state.detail?.favorite ?? false,
+      favorite: overrides.isFavorite ?? overrides.favorite ?? state.detail?.favorite ?? false,
       metadata: {
         sessionId: state.sessionId,
         categoryLabel: categoryLabelFor(state.selectedCategory),
@@ -2023,23 +2263,25 @@ function updateCarouselFocus() {
 
   function upsertAndRenderEntry(entry) {
     if (!entry) return;
-    upsertLibraryItem(entry);
+    const normalized = normalizeLibraryEntry(entry);
+    upsertLibraryItem(normalized);
     renderLibraryList();
     renderFavoritesList();
   }
 
   async function persistEntry(entry) {
     if (!entry) return null;
-    upsertAndRenderEntry(entry);
+    const normalized = normalizeLibraryEntry(entry);
+    upsertAndRenderEntry(normalized);
     if (!LibraryStore.supported) {
-      return entry;
+      return normalized;
     }
     try {
-      await LibraryStore.put(entry);
+      await LibraryStore.put(normalized);
     } catch (err) {
       console.warn("Library save failed", err?.message);
     }
-    return entry;
+    return normalized;
   }
 
   function showImagePlaceholder(message, allowRetry = true) {
@@ -2152,13 +2394,20 @@ function updateCarouselFocus() {
         throw new Error("Invalid API base; cannot fetch image.");
       }
 
-      let url = `${API}/api/ai-image?name=${encodeURIComponent(name)}&category=${encodeURIComponent(categoryId || "any")}&style=anime`;
-      if (univ) {
-        url += `&universe=${encodeURIComponent(univ)}`;
-      }
+      const payload = {
+        name,
+        category: categoryId || "any",
+        style: "anime",
+        universe: univ,
+        lang: curLang(),
+      };
 
-      console.log("Fetching image from:", url);
-      const r = await safeFetch(url);
+      console.log("Fetching image from:", `${API}/api/ai-image`);
+      const r = await safeFetch(`${API}/api/ai-image`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
       const data = await r.json().catch(() => ({}));
       const imgUrl = String(data?.imageUrl || data?.url || "");
 
@@ -2429,6 +2678,7 @@ function updateCarouselFocus() {
       if (liveEntry) {
         setDetailFromEntry(liveEntry, "live");
         persistEntry(liveEntry);
+        markLibraryBadge();
       }
 
       // Render together once everything is ready
@@ -2622,6 +2872,12 @@ function updateCarouselFocus() {
     applyLangSwitchUI();
     setLogoForLang(true); // Skip animation on initial load
     state.isInitialLoad = false;
+    try {
+      state.libraryHasNew = localStorage.getItem(LIBRARY_BADGE_KEY) === "1";
+    } catch {
+      state.libraryHasNew = false;
+    }
+    updateLibraryBadge();
 
     // Category init
     fillCategorySelectHidden();
@@ -2655,6 +2911,14 @@ function updateCarouselFocus() {
         closeDetailPanel();
         setView("search");
       });
+    }
+
+    if (el.detailDownloadBtn) {
+      el.detailDownloadBtn.addEventListener("click", handleDetailDownload);
+    }
+
+    if (el.detailCaptureBtn) {
+      el.detailCaptureBtn.addEventListener("click", handleDetailCapture);
     }
 
     if (el.detailCloseBtn) {

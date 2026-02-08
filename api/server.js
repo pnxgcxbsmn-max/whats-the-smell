@@ -4,16 +4,33 @@ import cors from "cors";
 import compression from "compression";
 import path, { dirname } from "path";
 import { fileURLToPath } from "url";
-import fs from "fs";
 import crypto from "crypto";
 import { LRUCache } from "lru-cache";
 import { GoogleGenAI } from "@google/genai";
+import { Resend } from "resend";
+import {
+  buildSmellKey,
+  buildImageKey,
+  getSeedSmell,
+  getSeedImage,
+  getSeedIndex,
+  getPersistentJson,
+  setPersistentJson,
+  hasPersistentStore,
+  getSeedStats,
+} from "./storage.js";
 
 const app = express();
 const PORT = process.env.PORT || 5051;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY; // API ML API key for both Seedream (Comics) and GPT Image 1 (other categories)
+const PROMPT_VERSION = process.env.PROMPT_VERSION || "v1";
+const IMAGE_PROMPT_VERSION = process.env.IMAGE_PROMPT_VERSION || "v2";
+const FEEDBACK_TO_EMAIL = process.env.FEEDBACK_TO_EMAIL || "";
+const RESEND_API_KEY = process.env.RESEND_API_KEY || "";
+const FEEDBACK_FROM_EMAIL = process.env.FEEDBACK_FROM_EMAIL || "onboarding@resend.dev";
+const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
 
 if (!GEMINI_API_KEY) {
   console.error("Missing GEMINI_API_KEY in api/.env");
@@ -62,7 +79,34 @@ app.use(express.static(FRONTEND_DIR, {
   }
 }));
 
-app.get("/health", (req, res) => res.json({ ok: true }));
+app.get("/health", async (req, res) => {
+  const checks = {
+    geminiConfigured: !!GEMINI_API_KEY,
+    imageProviderConfigured: !!OPENAI_API_KEY,
+    feedbackConfigured: !!(RESEND_API_KEY && FEEDBACK_TO_EMAIL),
+    redis: {
+      configured: hasPersistentStore(),
+      ok: null,
+    },
+  };
+
+  if (checks.redis.configured) {
+    const marker = { ts: Date.now() };
+    const key = "health::redis";
+    const setResult = await setPersistentJson(key, marker);
+    const getResult = await getPersistentJson(key);
+    checks.redis.ok = !!(setResult && getResult && getResult.ts === marker.ts);
+  }
+
+  const ok =
+    checks.geminiConfigured &&
+    checks.imageProviderConfigured &&
+    checks.feedbackConfigured &&
+    checks.redis.configured &&
+    checks.redis.ok !== false;
+
+  return res.status(ok ? 200 : 503).json({ ok, checks });
+});
 
 async function safeJson(r) {
   try {
@@ -89,52 +133,13 @@ const inFlightImages = new Map();
 const inFlightResponses = new Map();
 const feedbackEntries = [];
 const feedbackRateLimit = new Map();
-const FEEDBACK_MAX_PER_WINDOW = 10;
-const FEEDBACK_WINDOW_MS = 60 * 60 * 1000;
+const FEEDBACK_MAX_PER_WINDOW = 5;
+const FEEDBACK_WINDOW_MS = 60 * 1000;
 const MAX_FEEDBACK_SCREENSHOT = 2_000_000; // ~1.5MB base64
 
-// Carpeta para guardar y servir imágenes generadas
-const GENERATED_DIR = path.join(FRONTEND_DIR, "generated");
-if (!fs.existsSync(GENERATED_DIR)) fs.mkdirSync(GENERATED_DIR, { recursive: true });
-
-// Carpeta para respuestas cacheadas
-const CACHE_DIR = path.join(FRONTEND_DIR, "cache");
-if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR, { recursive: true });
-
-// Archivos de persistencia
-const CHAR_INDEX_FILE = path.join(CACHE_DIR, "character-index.json");
-const RESPONSE_CACHE_FILE = path.join(CACHE_DIR, "responses.json");
-
-// Índice de nombres: mapa de normalized → nombre oficial de ficha
-let characterIndex = {};
-// Cache de respuestas: { "ficha-name||en": "textEn", "ficha-name||es": "textEs" }
-let persistedResponses = {};
-
-// Cargar datos persistidos
-function loadPersistedData() {
-  try {
-    if (fs.existsSync(CHAR_INDEX_FILE)) {
-      characterIndex = JSON.parse(fs.readFileSync(CHAR_INDEX_FILE, "utf8"));
-      console.log(`Loaded character index: ${Object.keys(characterIndex).length} entries`);
-    }
-    if (fs.existsSync(RESPONSE_CACHE_FILE)) {
-      persistedResponses = JSON.parse(fs.readFileSync(RESPONSE_CACHE_FILE, "utf8"));
-      console.log(`Loaded response cache: ${Object.keys(persistedResponses).length} entries`);
-    }
-  } catch (e) {
-    console.error("Error loading persisted data:", e.message);
-  }
-}
-
-// Guardar datos persistidos
-function savePersistedData() {
-  try {
-    fs.writeFileSync(CHAR_INDEX_FILE, JSON.stringify(characterIndex, null, 2), "utf8");
-    fs.writeFileSync(RESPONSE_CACHE_FILE, JSON.stringify(persistedResponses, null, 2), "utf8");
-  } catch (e) {
-    console.error("Error saving persisted data:", e.message);
-  }
-}
+// Índice de nombres: mapa de normalized → nombre oficial de ficha (seed + runtime)
+const seedIndex = getSeedIndex();
+let characterIndex = { ...seedIndex };
 
 function canSubmitFeedback(ip) {
   const safeIp = String(ip || "unknown");
@@ -162,7 +167,6 @@ function canSubmitFeedback(ip) {
 // Registrar nombre oficial de personaje
 function registerCharacter(normalizedSearchName, officialCharName) {
   characterIndex[normalizedSearchName] = officialCharName;
-  savePersistedData();
 }
 
 // Obtener nombre oficial de ficha desde búsqueda
@@ -171,21 +175,46 @@ function getOfficialCharacterName(searchName) {
   return characterIndex[normalized] || searchName;
 }
 
-// Guardar respuesta en cache persistido
-function setCachedResponse(charName, lang, text) {
-  const key = `${charName}||${lang}`;
-  persistedResponses[key] = text;
-  savePersistedData();
+async function getCachedSmell({ name, category, lang }) {
+  const cacheKey = buildSmellKey({ name, category, lang, promptVersion: PROMPT_VERSION });
+  const memoryHit = responseCache.get(cacheKey);
+  if (memoryHit) {
+    return { text: memoryHit, cacheHit: true, source: "memory", cacheKey };
+  }
+
+  const persistent = await getPersistentJson(cacheKey);
+  if (persistent && persistent.text) {
+    responseCache.set(cacheKey, persistent.text);
+    return { text: persistent.text, cacheHit: true, source: "persistent", cacheKey };
+  }
+
+  const seedText = getSeedSmell(name, lang);
+  if (seedText) {
+    return { text: seedText, cacheHit: true, source: "seed", cacheKey };
+  }
+
+  return { text: null, cacheHit: false, source: "miss", cacheKey };
 }
 
-// Obtener respuesta del cache persistido
-function getCachedResponse(charName, lang) {
-  const key = `${charName}||${lang}`;
-  return persistedResponses[key] || null;
+async function setCachedSmell({ name, category, lang, text, provider }) {
+  const cacheKey = buildSmellKey({ name, category, lang, promptVersion: PROMPT_VERSION });
+  const payload = {
+    text,
+    name,
+    category,
+    lang,
+    promptVersion: PROMPT_VERSION,
+    provider: provider || "gemini",
+    createdAt: Date.now(),
+  };
+  responseCache.set(cacheKey, text);
+  await setPersistentJson(cacheKey, payload);
+  return cacheKey;
 }
 
-// Cargar datos al iniciar
-loadPersistedData();
+// Seed stats (read-only) for observability
+const seedStats = getSeedStats();
+console.log(`Seed cache loaded: responses=${seedStats.responses}, index=${seedStats.index}`);
 
 function sha1(s) {
   return crypto.createHash("sha1").update(String(s)).digest("hex");
@@ -254,74 +283,63 @@ function extractCharacterNameFromSheet(text) {
   return null;
 }
 
-// Utility: Image processing helper - optimize for WebP & size
-async function optimizeImage(buffer, maxWidth = 512, quality = 75) {
-  // Optimization disabled - sharp dependency removed for Railway compatibility
-  // Simply return the original buffer
-  if (!buffer || buffer.length === 0) {
-    throw new Error("Empty buffer");
-  }
-  console.log(`AI-Image: Image optimization skipped (sharp not available) - returning original buffer`);
-  return buffer;
-}
-
-// Utility: Image processing helper (kept for future use)
-async function cropWatermark(buffer) {
-  // Image cropping disabled - sharp dependency removed
-  // Simply return the original buffer
-  console.log(`AI-Image: Image cropping skipped (sharp not available) - returning original buffer`);
-  return buffer;
-}
-
-
-function buildImageKey({ name, category, style, universe = "", providerHint = "" }) {
-  // Incrementa v1 → v2 cuando cambies el prompt/estilo global de imágenes
-  // Usa nombre normalizado para reconocer variaciones (Goku = Son Goku)
-  const v = "v2";
+function buildImageCacheKey({ name, category, style, lang, universe }) {
   const normalizedName = normalizeCharacterName(name);
-  const univHash = universe ? sha1(universe).slice(0, 8) : "nouniv";
-  return `img::${v}::${normalizedName}::${normKey(category || "any")}::${normKey(style || "anime")}::${univHash}::${normKey(
-    providerHint
-  )}`;
+  const universeKey = universe ? sha1(universe).slice(0, 8) : "nouniv";
+  return buildImageKey({
+    name: `${normalizedName}::${universeKey}`,
+    category,
+    style,
+    lang,
+    promptVersion: IMAGE_PROMPT_VERSION,
+  });
 }
 
-function pickExt(contentType) {
-  const ct = String(contentType || "").toLowerCase();
-  if (ct.includes("png")) return "png";
-  if (ct.includes("webp")) return "webp";
-  if (ct.includes("jpeg") || ct.includes("jpg")) return "jpg";
-  return "png";
-}
-
-async function fetchImageBuffer(url, timeoutMs = 12000) {
-  const controller = new AbortController();
-  const t = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    let needsAuth = false;
-    try {
-      const parsed = new URL(String(url));
-      needsAuth = /aimlapi/i.test(parsed.hostname);
-    } catch {
-      needsAuth = false;
-    }
-
-    const r = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        "User-Agent": "whats-the-smell/1.0",
-        ...(needsAuth && OPENAI_API_KEY ? { "Authorization": `Bearer ${OPENAI_API_KEY}` } : {}),
-      },
-    });
-    if (!r.ok) throw new Error(`Upstream HTTP ${r.status}`);
-    const ct = r.headers.get("content-type") || "";
-    const ab = await r.arrayBuffer();
-    const buf = Buffer.from(ab);
-    // Evita "placeholders" o respuestas inválidas
-    if (buf.length < 20_000) throw new Error("Image too small (likely invalid)");
-    return { buf, contentType: ct };
-  } finally {
-    clearTimeout(t);
+async function getCachedImage({ name, category, style, lang, universe }) {
+  const cacheKey = buildImageCacheKey({ name, category, style, lang, universe });
+  const memoryHit = imageCache.get(cacheKey);
+  if (memoryHit) {
+    return { imageUrl: memoryHit, cacheHit: true, source: "memory", cacheKey };
   }
+
+  const persistent = await getPersistentJson(cacheKey);
+  if (persistent && persistent.imageUrl) {
+    imageCache.set(cacheKey, persistent.imageUrl);
+    return { imageUrl: persistent.imageUrl, cacheHit: true, source: "persistent", cacheKey, provider: persistent.provider };
+  }
+
+  const seedUrl = getSeedImage(name, lang);
+  if (seedUrl) {
+    return { imageUrl: seedUrl, cacheHit: true, source: "seed", cacheKey, provider: "seed" };
+  }
+
+  return { imageUrl: null, cacheHit: false, source: "miss", cacheKey };
+}
+
+async function setCachedImage({ cacheKey, imageUrl, provider }) {
+  if (!cacheKey || !imageUrl) return null;
+  const payload = {
+    imageUrl,
+    provider: provider || "unknown",
+    promptVersion: IMAGE_PROMPT_VERSION,
+    createdAt: Date.now(),
+  };
+  imageCache.set(cacheKey, imageUrl);
+  await setPersistentJson(cacheKey, payload);
+  return imageUrl;
+}
+
+async function storeImageBlob({ cacheKey, contentType, base64 }) {
+  if (!cacheKey || !base64) return null;
+  const imageId = sha1(cacheKey).slice(0, 16);
+  const blobKey = `image-blob::${imageId}`;
+  const payload = {
+    contentType: contentType || "image/png",
+    base64,
+    createdAt: Date.now(),
+  };
+  await setPersistentJson(blobKey, payload);
+  return { imageId, imageUrl: `/api/image/${imageId}` };
 }
 
 function buildImagePrompt(name, category, style, universe = "") {
@@ -414,7 +432,7 @@ async function generateImageWithOpenAI({ prompt, seed = 42, width = 768, height 
 
   for (const model of models) {
     try {
-      console.log(`AI-Image: Intentando con modelo ${model} para categoría ${category}...`);
+      console.log(`[IMG] intentando modelo=${model} categoria=${category}`);
 
       // Sanitize prompt - ensure it's valid UTF-8 and doesn't have issues
       const sanitizedPrompt = String(prompt || "")
@@ -424,10 +442,10 @@ async function generateImageWithOpenAI({ prompt, seed = 42, width = 768, height 
       const body = {
         model: model,
         prompt: sanitizedPrompt,
-        response_format: "b64_json", // prefer base64 to avoid flaky CDN fetches
+        response_format: "b64_json", // prefer base64 to avoid protected CDN URLs
       };
 
-      console.log("AI-Image: Body enviado:", JSON.stringify({ model, promptLength: sanitizedPrompt.length }));
+      console.log("[IMG] request", JSON.stringify({ model, promptLength: sanitizedPrompt.length }));
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s
@@ -446,19 +464,19 @@ async function generateImageWithOpenAI({ prompt, seed = 42, width = 768, height 
 
       if (!response.ok) {
         const errText = await response.text().catch(() => "");
-        console.warn(`AI-Image: Modelo ${model} falló (${response.status}):`, errText.slice(0, 300));
+        console.warn(`[IMG] modelo=${model} status=${response.status} body=${errText.slice(0, 200)}`);
         lastError = new Error(`${model} error: ${response.status} - ${errText.slice(0, 100)}`);
         continue; // Try next model
       }
 
       const data = await response.json().catch(() => ({}));
-      console.log("AI-Image: Respuesta exitosa de", model);
+      console.log(`[IMG] ok model=${model}`);
 
       // Format: data.data[0].url or data.images[0].url
       const first = data?.data?.[0] || data?.images?.[0];
 
       if (!first) {
-        console.warn(`AI-Image: Sin imagen en respuesta de ${model}:`, JSON.stringify(data).slice(0, 250));
+        console.warn(`[IMG] model=${model} sin imagen response=${JSON.stringify(data).slice(0, 200)}`);
         lastError = new Error(`${model}: No image in response`);
         continue; // Try next model
       }
@@ -466,28 +484,28 @@ async function generateImageWithOpenAI({ prompt, seed = 42, width = 768, height 
       const b64 = first?.b64_json || first?.b64 || first?.base64;
       if (b64) {
         const cleaned = String(b64).replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/, "");
-        console.log("AI-Image: Base64 obtenido de", model);
-        return { kind: "b64", value: cleaned, contentType: "image/png" };
+        console.log(`[IMG] base64 model=${model}`);
+        return { kind: "b64", value: cleaned, contentType: "image/png", model };
       }
 
       const urlOut = first?.url || (typeof first === "string" ? first : null);
       if (urlOut) {
-        console.log("AI-Image: URL obtenida de", model, ":", String(urlOut).slice(0, 50) + "...");
-        return { kind: "url", value: String(urlOut) };
+        console.log(`[IMG] url model=${model} value=${String(urlOut).slice(0, 50)}...`);
+        return { kind: "url", value: String(urlOut), model };
       }
 
-      console.warn(`AI-Image: Sin payload válido en ${model}:`, JSON.stringify(first).slice(0, 250));
+      console.warn(`[IMG] model=${model} sin payload=${JSON.stringify(first).slice(0, 200)}`);
       lastError = new Error(`${model}: No valid payload`);
       continue; // Try next model
     } catch (err) {
-      console.warn(`AI-Image: Error con ${model}:`, err.message);
+      console.warn(`[IMG] model=${model} error=${err.message}`);
       lastError = err;
       continue; // Try next model
     }
   }
 
   // All models failed
-  console.error("AI-Image: Todos los modelos fallaron:", lastError?.message);
+  console.error("[IMG] todos los modelos fallaron:", lastError?.message);
   throw lastError || new Error("All image models failed");
 }
 
@@ -732,6 +750,102 @@ async function geminiTranslate(text, target) {
   return String(resp?.candidates?.[0]?.content?.parts?.[0]?.text || "").trim();
 }
 
+async function getImageForCharacter({ name, category, style, lang, universe }) {
+  const start = Date.now();
+  const cleanName = String(name || "").trim();
+  if (!cleanName) {
+    return { ok: false, error: "Missing name" };
+  }
+
+  const cacheHit = await getCachedImage({ name: cleanName, category, style, lang, universe });
+  if (cacheHit.imageUrl) {
+    console.log(`[IMG] cacheHit (${cacheHit.source}) name="${cleanName}"`);
+    if (cacheHit.source === "seed" && hasPersistentStore()) {
+      await setCachedImage({
+        cacheKey: cacheHit.cacheKey,
+        imageUrl: cacheHit.imageUrl,
+        provider: cacheHit.provider || "seed",
+      });
+    }
+    return {
+      ok: true,
+      imageUrl: cacheHit.imageUrl,
+      provider: cacheHit.provider || cacheHit.source,
+      cacheHit: true,
+      durationMs: Date.now() - start,
+    };
+  }
+
+  const cacheKey = cacheHit.cacheKey;
+  console.log(`[IMG] cacheMiss name="${cleanName}" category="${category}" style="${style}"`);
+  if (inFlightImages.has(cacheKey)) {
+    const url = await inFlightImages.get(cacheKey);
+    return { ok: true, imageUrl: url, provider: "inflight", cacheHit: true, durationMs: Date.now() - start };
+  }
+
+  if (!OPENAI_API_KEY) {
+    return { ok: false, error: "Image provider not configured" };
+  }
+
+  const job = (async () => {
+    const prompt = buildImagePrompt(cleanName, category, style, universe);
+    const seed = Math.abs(parseInt(sha1(cacheKey).slice(0, 8), 16)) % 100000;
+
+    console.log(`[IMG] generate name="${cleanName}" category="${category}" style="${style}"`);
+
+    const gen = await generateImageWithOpenAI({
+      prompt,
+      seed,
+      width: 768,
+      height: 768,
+      category,
+    });
+
+    let imageUrl = "";
+    let provider = `aiml:${gen?.model || "unknown"}`;
+
+    if (gen && gen.kind === "b64") {
+      const stored = await storeImageBlob({
+        cacheKey,
+        contentType: gen.contentType || "image/png",
+        base64: String(gen.value || "").replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/, ""),
+      });
+      imageUrl = stored?.imageUrl || "";
+    } else if (gen && gen.kind === "url") {
+      imageUrl = String(gen.value || "");
+    }
+
+    if (!imageUrl) {
+      throw new Error("No image output returned");
+    }
+
+    await setCachedImage({ cacheKey, imageUrl, provider });
+    return { imageUrl, provider };
+  })();
+
+  const inflight = job
+    .then((x) => {
+      inFlightImages.delete(cacheKey);
+      return x.imageUrl;
+    })
+    .catch((err) => {
+      inFlightImages.delete(cacheKey);
+      console.error("[IMG] job error:", err.message);
+      throw err;
+    });
+
+  inFlightImages.set(cacheKey, inflight);
+
+  try {
+    const out = await job;
+    const duration = Date.now() - start;
+    console.log(`[IMG] generated provider=${out.provider} duration=${duration}ms`);
+    return { ok: true, imageUrl: out.imageUrl, provider: out.provider, cacheHit: false, durationMs: duration };
+  } catch (err) {
+    return { ok: false, error: err?.message || "Image generation failed" };
+  }
+}
+
 /* ========================= API routes ========================= */
 app.post("/api/smell", async (req, res) => {
   const startTime = Date.now();
@@ -750,6 +864,8 @@ app.post("/api/smell", async (req, res) => {
       return res.status(400).json({ error: "Category required" });
     }
 
+    const normalizedSearch = normalizeCharacterName(prompt);
+
     // 1) Normalizar búsqueda con Gemini - reconoce variaciones y errores gramaticales
     // Convierte "naruto", "uzumaki naruto", "naruto uzumaki" → "Naruto Uzumaki" (nombre oficial de Ficha)
     let formalCharacterName = await geminiNormalizeCharacterSearch(prompt, category);
@@ -763,19 +879,39 @@ app.post("/api/smell", async (req, res) => {
     }
     
     // 3) Registrar esta variación para búsquedas futuras
-    registerCharacter(normalizeCharacterName(prompt), formalCharacterName);
+    registerCharacter(normalizedSearch, formalCharacterName);
     
-    // 4) Buscar en cache usando el nombre oficial de Ficha
-    let textEn = getCachedResponse(formalCharacterName, "en");
-    let cached = false;
+    // 4) Buscar en cache usando el nombre oficial de Ficha + contexto
+    const cacheLookup = await getCachedSmell({
+      name: formalCharacterName,
+      category,
+      lang: "en",
+    });
+    let textEn = cacheLookup.text;
+    let cached = cacheLookup.cacheHit;
+    const cacheSource = cacheLookup.source;
 
     if (textEn) {
       cached = true;
       timings.cache_hit = Date.now() - startTime;
-      console.log("Smell: Resultado EN encontrado en cache persistido:", formalCharacterName);
+      console.log(`Smell: Cache hit (${cacheSource}) for:`, formalCharacterName);
+      if (cacheSource === "seed" && hasPersistentStore()) {
+        await setCachedSmell({
+          name: formalCharacterName,
+          category,
+          lang: "en",
+          text: textEn,
+          provider: "seed",
+        });
+      }
     } else {
       // 5) Si no está en cache, generar con in-flight deduplication
-      const cacheKeyEn = `${formalCharacterName}||en||${normKey(category)}`;
+      const cacheKeyEn = buildSmellKey({
+        name: formalCharacterName,
+        category,
+        lang: "en",
+        promptVersion: PROMPT_VERSION,
+      });
       
       if (inFlightResponses.has(cacheKeyEn)) {
         console.log("Smell: Esperando generación in-flight para:", prompt);
@@ -806,8 +942,8 @@ app.post("/api/smell", async (req, res) => {
               }
             }
             
-            // Guardar en cache persistido con nombre de ficha
-            setCachedResponse(finalName, "en", out);
+            // Guardar en cache persistente con nombre de ficha
+            await setCachedSmell({ name: finalName, category, lang: "en", text: out, provider: "gemini" });
             console.log("Smell: Respuesta generada y cacheada:", finalName);
             return out;
           } catch (genErr) {
@@ -861,34 +997,24 @@ app.post("/api/smell", async (req, res) => {
         // Extract universe from the text if available
         const universeMatch = textEn.match(/Universe:\s*([^\n]+)/);
         const universe = universeMatch ? universeMatch[1].trim() : "";
-        
-        const imageParams = new URLSearchParams({
+
+        const imageResp = await getImageForCharacter({
           name: formalCharacterName,
           category: category || "any",
           style: "anime",
-          universe: universe
+          lang: "en",
+          universe,
         });
-        
-        const imageUrl = await fetch(`http://localhost:${PORT}/api/ai-image?${imageParams.toString()}`, {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' }
-        }).then(r => r.json()).then(d => {
-          const urlOut = d?.imageUrl || d?.url || null;
-          if (d?.ok && urlOut) {
-            const imageTime = Date.now() - imageStart;
-            console.log("[IMG] Smell: Imagen generada:", urlOut, `(${imageTime}ms)`, "provider=", d.provider || "unknown");
-            timings.image_generation = imageTime;
-            setCachedResponse(`${formalCharacterName}||image`, "en", urlOut);
-          } else {
-            console.warn("[IMG] Smell: respuesta de imagen sin url", d);
-          }
-          return urlOut;
-        }).catch(e => {
-          console.warn("[IMG] Parallel image generation failed:", e.message);
-          return null;
-        });
-        
-        return imageUrl;
+
+        if (imageResp?.ok && imageResp.imageUrl) {
+          const imageTime = Date.now() - imageStart;
+          console.log("[IMG] Smell: Imagen lista:", imageResp.imageUrl, `(${imageTime}ms)`, "provider=", imageResp.provider || "unknown");
+          timings.image_generation = imageTime;
+        } else {
+          console.warn("[IMG] Smell: respuesta de imagen sin url", imageResp);
+        }
+
+        return imageResp?.imageUrl || null;
       } catch (e) {
         console.warn("[IMG] Image parallel generation error:", e.message);
         return null;
@@ -899,7 +1025,12 @@ app.post("/api/smell", async (req, res) => {
     const translationPromise = (async () => {
       const translationStart = Date.now();
       try {
-        let textEs = getCachedResponse(formalCharacterName, "es");
+        const cachedEs = await getCachedSmell({
+          name: formalCharacterName,
+          category,
+          lang: "es",
+        });
+        let textEs = cachedEs.text || "";
         const shouldHaveEs = requestedLang === "es" || includeEs;
         
         if (!textEs && shouldHaveEs) {
@@ -908,7 +1039,7 @@ app.post("/api/smell", async (req, res) => {
           const translationTime = Date.now() - translationStart;
           console.log("Smell: Traducción completada:", `(${translationTime}ms)`);
           timings.translation = translationTime;
-          setCachedResponse(formalCharacterName, "es", textEs);
+          await setCachedSmell({ name: formalCharacterName, category, lang: "es", text: textEs, provider: "gemini" });
         } else if (textEs) {
           timings.translation_cached = Date.now() - translationStart;
         }
@@ -930,7 +1061,7 @@ app.post("/api/smell", async (req, res) => {
       sourceLang: "en",
       requestedLang,
       officialName: formalCharacterName,
-      normalizedSearch: normalizeCharacterName(prompt),
+      normalizedSearch,
       timings, // Include timing info in response
     };
 
@@ -985,7 +1116,7 @@ app.post("/api/translate", async (req, res) => {
   }
 });
 
-app.post("/api/feedback", (req, res) => {
+app.post("/api/feedback", async (req, res) => {
   const message = String(req.body?.message || "").trim();
   if (message.length < 5) {
     return res.status(400).json({ ok: false, error: "Message is required" });
@@ -1002,7 +1133,7 @@ app.post("/api/feedback", (req, res) => {
   }
 
   const requestedCategory = String(req.body?.category || "feedback").toLowerCase();
-  const allowedCategories = new Set(["feedback", "bug", "idea", "other"]);
+  const allowedCategories = new Set(["feedback", "bug", "idea", "suggestion", "other", "image", "aroma"]);
   const safeCategory = allowedCategories.has(requestedCategory) ? requestedCategory : "feedback";
 
   const entry = {
@@ -1013,6 +1144,8 @@ app.post("/api/feedback", (req, res) => {
     contact: String(req.body?.contact || "").trim().slice(0, 180),
     url: String(req.body?.url || "").trim().slice(0, 500),
     userAgent: String(req.body?.userAgent || "").trim().slice(0, 500),
+    locale: String(req.body?.locale || "").trim().slice(0, 20),
+    sessionId: String(req.body?.sessionId || "").trim().slice(0, 120),
     message: message.slice(0, 2000),
     screenshot: screenshotBase64 || null,
   };
@@ -1022,176 +1155,99 @@ app.post("/api/feedback", (req, res) => {
     feedbackEntries.shift();
   }
 
-  console.log(`[feedback] ${entry.category} :: ${entry.message.slice(0, 120)}${entry.message.length > 120 ? "…" : ""}`);
-  return res.json({ ok: true });
+  if (!resend || !FEEDBACK_TO_EMAIL) {
+    console.warn("[feedback] Email delivery not configured");
+    return res.status(503).json({ ok: false, error: "Feedback delivery not configured" });
+  }
+
+  const subject = `[WTS] ${entry.category} feedback`;
+  const text = [
+    `Category: ${entry.category}`,
+    `When: ${new Date(entry.ts).toISOString()}`,
+    entry.contact ? `Contact: ${entry.contact}` : "Contact: (none)",
+    entry.url ? `URL: ${entry.url}` : "URL: (none)",
+    entry.userAgent ? `User-Agent: ${entry.userAgent}` : "User-Agent: (none)",
+    entry.locale ? `Locale: ${entry.locale}` : "Locale: (none)",
+    entry.sessionId ? `Session: ${entry.sessionId}` : "Session: (none)",
+    "",
+    "Message:",
+    entry.message,
+  ].join("\n");
+
+  const attachments = [];
+  if (entry.screenshot) {
+    const raw = entry.screenshot.split(",")[1] || entry.screenshot;
+    attachments.push({ filename: "screenshot.jpg", content: raw });
+  }
+
+  try {
+    const result = await resend.emails.send({
+      from: FEEDBACK_FROM_EMAIL,
+      to: [FEEDBACK_TO_EMAIL],
+      subject,
+      text,
+      attachments,
+    });
+    console.log(`[feedback] delivered id=${result?.id || "unknown"} category=${entry.category}`);
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error("[feedback] Email send failed:", err?.message || err);
+    return res.status(502).json({ ok: false, error: "Feedback delivery failed" });
+  }
 });
 
-/* ========================= IA Image endpoint with Seedream 4.5 ========================= */
+/* ========================= IA Image endpoint (persistent cache) ========================= */
+app.post("/api/ai-image", async (req, res) => {
+  const body = req.body || {};
+  const name = String(body?.name || "").trim();
+  const category = String(body?.category || "any").trim();
+  const style = String(body?.style || "anime").trim();
+  const universe = String(body?.universe || "").trim();
+  const lang = String(body?.lang || "en").trim();
+
+  const resp = await getImageForCharacter({ name, category, style, lang, universe });
+  const payload = {
+    ok: !!resp.ok,
+    imageUrl: resp.imageUrl || undefined,
+    provider: resp.provider || undefined,
+    cacheHit: !!resp.cacheHit,
+    error: resp.ok ? undefined : resp.error || "Image generation failed",
+  };
+
+  return res.status(resp.ok ? 200 : 500).json(payload);
+});
+
 app.get("/api/ai-image", async (req, res) => {
-  try {
-    const name = String(req.query?.name || "").trim();
-    const category = String(req.query?.category || "any").trim();
-    const style = String(req.query?.style || "anime").trim();
-    const universe = String(req.query?.universe || "").trim();
+  const name = String(req.query?.name || "").trim();
+  const category = String(req.query?.category || "any").trim();
+  const style = String(req.query?.style || "anime").trim();
+  const universe = String(req.query?.universe || "").trim();
+  const lang = String(req.query?.lang || "en").trim();
 
-    if (!name) return res.status(400).json({ error: "Missing name" });
+  const resp = await getImageForCharacter({ name, category, style, lang, universe });
+  const payload = {
+    ok: !!resp.ok,
+    imageUrl: resp.imageUrl || undefined,
+    provider: resp.provider || undefined,
+    cacheHit: !!resp.cacheHit,
+    error: resp.ok ? undefined : resp.error || "Image generation failed",
+  };
 
-    const cacheKey = buildImageKey({ name, category, style, universe });
+  return res.status(resp.ok ? 200 : 500).json(payload);
+});
 
-    // 1) Cache hit - verificar que el archivo físico existe
-    const cached = imageCache.get(cacheKey);
-    if (cached) {
-      const cachedFile = path.join(GENERATED_DIR, path.basename(cached));
-      if (fs.existsSync(cachedFile)) {
-        console.log("[IMG] Cache hit:", cached);
-        return res.json({ ok: true, imageUrl: cached, cached: true, provider: "cache" });
-      } else {
-        imageCache.delete(cacheKey);
-        console.log("[IMG] Cache entry missing on disk, regenerating:", cached);
-      }
-    }
-
-    // 1b) Verificar si el archivo ya existe físicamente (por si la memoria se limpió)
-    // Si existe con el nombre normalizado, NO regenerar, solo devolver
-    const ext = pickExt("image/png"); // por defecto PNG
-    const sanitizedName = sanitizeFilename(name);
-    const expectedFile = `${sanitizedName}.*`; // puede ser .png, .jpg, .webp
-    const existingFiles = fs.readdirSync(GENERATED_DIR).filter(f => {
-      const baseName = f.split('.').slice(0, -1).join('.');
-      return baseName === sanitizedName;
-    });
-    
-    if (existingFiles.length > 0) {
-      const existingFile = existingFiles[0];
-      const localUrl = `/generated/${existingFile}`;
-      console.log("[IMG] Disk hit (rehydrate cache):", localUrl);
-      imageCache.set(cacheKey, localUrl);
-      return res.json({ ok: true, imageUrl: localUrl, cached: true, provider: "disk" });
-    }
-
-    // 2) In-flight de-dupe
-    if (inFlightImages.has(cacheKey)) {
-      const url = await inFlightImages.get(cacheKey);
-      return res.json({ ok: true, imageUrl: url, cached: true, provider: "inflight" });
-    }
-
-    const job = (async () => {
-      const prompt = buildImagePrompt(name, category, style, universe);
-      const seed = Math.abs(parseInt(sha1(cacheKey).slice(0, 8), 16)) % 100000;
-      
-      console.log("[IMG] Generando imagen para:", name, "providerHint:", category, "prompt:", prompt.slice(0, 100));
-      
-      const gen = await generateImageWithOpenAI({
-        prompt,
-        seed,
-        width: 768,
-        height: 768,
-        category  // Pass category for validation
-      });
-
-      let buf, contentType;
-      if (gen && gen.kind === "b64") {
-        buf = Buffer.from(String(gen.value || ""), "base64");
-        contentType = gen.contentType || "image/png";
-        // Evita "placeholders" o respuestas inválidas
-        if (!buf || buf.length < 20_000) throw new Error("Image too small (likely invalid)");
-      } else {
-        const urlToFetch = gen?.value || gen;
-        let outFetch = await fetchImageBuffer(urlToFetch, 15000);
-        buf = outFetch.buf;
-        contentType = outFetch.contentType;
-      }
-      
-      // Verify buffer is valid before optimization
-      if (!buf || buf.length === 0) {
-        throw new Error("Invalid image buffer received");
-      }
-      
-      // OPTIMIZATION 1: Compress to WebP and resize
-      console.log("[IMG] Optimizando imagen a WebP (bytes:", buf.length, ")");
-      try {
-        buf = await optimizeImage(buf, 512, 75);
-        console.log("AI-Image: Imagen lista para guardar");
-      } catch (optErr) {
-        console.warn("AI-Image: Optimization failed, using original:", optErr.message);
-        // Continue with original buffer if optimization fails
-      }
-      
-      const sanitizedName = sanitizeFilename(name);
-      const file = `${sanitizedName}.webp`; // Always use WebP
-      const abs = path.join(GENERATED_DIR, file);
-      
-      // CRÍTICO: Si el archivo ya existe, NO reemplazar - usar el que está en disco
-      if (fs.existsSync(abs)) {
-        console.log("AI-Image: Archivo ya existe en disco, NO se reemplaza:", file);
-        const localUrl = `/generated/${file}`;
-        return { localUrl, provider: "disk-existing" };
-      }
-      
-      fs.writeFileSync(abs, buf);
-      const localUrl = `/generated/${file}`;
-      console.log("[IMG] Imagen guardada en:", localUrl);
-      return { localUrl, provider: "openai-dalle3" };
-    })();
-
-    // Guardar la promesa con catch para evitar unhandled rejections que pueden tumbar el proceso
-    const inflight = job
-      .then((x) => {
-        inFlightImages.delete(cacheKey);
-        return x.localUrl;
-      })
-      .catch((err) => {
-        // Limpieza defensiva
-        inFlightImages.delete(cacheKey);
-        console.error("AI-Image job error:", err.message);
-        throw err;
-      });
-
-    inFlightImages.set(cacheKey, inflight);
-
-    try {
-      const out = await job;
-      imageCache.set(cacheKey, out.localUrl);
-      return res.json({ ok: true, imageUrl: out.localUrl, cached: false, provider: out.provider });
-    } catch (jobErr) {
-      inFlightImages.delete(cacheKey);
-      const errorMsg = String(jobErr?.message || jobErr);
-      console.error("[IMG] Job failed:", errorMsg);
-      
-      // FALLBACK: only use a cached image if it matches this character; no random images
-      console.log("[IMG] Intentando fallback específico desde generated/");
-      const safeName = sanitizeFilename(name);
-      const matchFiles = fs.readdirSync(GENERATED_DIR).filter(f => f.startsWith(`${safeName}.`) && f.endsWith('.webp'));
-      if (matchFiles.length > 0) {
-        const fallbackFile = matchFiles[0]; // deterministic
-        const fallbackUrl = `/generated/${fallbackFile}`;
-        console.log("[IMG] Fallback usando cache del personaje:", fallbackUrl);
-        return res.json({ 
-          ok: true,
-          imageUrl: fallbackUrl, 
-          cached: true, 
-          provider: "fallback",
-          warning: "Used cached image for character due to generation error"
-        });
-      }
-      
-      return res.status(500).json({
-        ok: false,
-        error: "ai-image failed",
-        details: errorMsg,
-        provider: "error"
-      });
-    }
-  } catch (e) {
-    const errorMsg = String(e?.message || e);
-    console.error("[IMG] Endpoint error:", errorMsg);
-    return res.status(500).json({
-      ok: false,
-      error: "ai-image failed",
-      details: errorMsg,
-      provider: "error"
-    });
+app.get("/api/image/:id", async (req, res) => {
+  const id = String(req.params?.id || "").trim();
+  if (!id) return res.status(400).json({ ok: false, error: "Missing image id" });
+  const blob = await getPersistentJson(`image-blob::${id}`);
+  if (!blob || !blob.base64) {
+    return res.status(404).json({ ok: false, error: "Image not found" });
   }
+  const contentType = blob.contentType || "image/png";
+  const buffer = Buffer.from(String(blob.base64), "base64");
+  res.setHeader("Content-Type", contentType);
+  res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+  return res.send(buffer);
 });
 
 // ===== Admin: Clear cache =====
@@ -1203,30 +1259,8 @@ app.post("/admin/clear-cache", (req, res) => {
     inFlightResponses.clear();
     inFlightImages.clear();
 
-    // Clear cache directory files
-    if (fs.existsSync(CACHE_DIR)) {
-      const files = fs.readdirSync(CACHE_DIR);
-      for (const file of files) {
-        const filePath = path.join(CACHE_DIR, file);
-        if (fs.lstatSync(filePath).isFile()) {
-          fs.unlinkSync(filePath);
-        }
-      }
-    }
-
-    // Clear generated images directory
-    if (fs.existsSync(GENERATED_DIR)) {
-      const files = fs.readdirSync(GENERATED_DIR);
-      for (const file of files) {
-        const filePath = path.join(GENERATED_DIR, file);
-        if (fs.lstatSync(filePath).isFile()) {
-          fs.unlinkSync(filePath);
-        }
-      }
-    }
-
-    console.log("Cache cleared: in-memory caches, cache directory, and generated images");
-    return res.json({ ok: true, message: "Cache cleared successfully" });
+    console.log("Cache cleared: in-memory caches only (persistent cache untouched)");
+    return res.json({ ok: true, message: "In-memory cache cleared" });
   } catch (e) {
     console.error("Clear cache error:", e.message);
     return res.status(500).json({
