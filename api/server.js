@@ -373,37 +373,39 @@ Quality:
 }
 
 async function generateImageWithOpenAI({ prompt, seed = 42, width = 768, height = 768, category = "any" }) {
-  // Model selection based on category recommendations
+  // Model selection based on category; use AIML API IDs (no vendor prefix)
   const categoryLower = String(category || "").toLowerCase();
-  
-  // Determine best model for category - use exact API names
+
+  // AIMLAPI currently exposes these IDs; adjust here if your account uses different ones
+  const MODEL_OPENAI = process.env.IMG_MODEL_PRIMARY || "gpt-image-1";
+  const MODEL_SEEDREAM = process.env.IMG_MODEL_FALLBACK || "bytedance/seedream-4-5";
+
   let primaryModel, fallbackModel;
-  
+
   if (categoryLower.includes("anime") || categoryLower.includes("manga")) {
-    primaryModel = "openai/gpt-image-1";  // GPT Image 1.5 - best for anime (strong prompt adherence)
-    fallbackModel = "bytedance/seedream-4-5";
+    primaryModel = MODEL_OPENAI;
+    fallbackModel = MODEL_SEEDREAM;
   } else if (categoryLower.includes("game") || categoryLower.includes("video")) {
-    primaryModel = "bytedance/seedream-4-5";
-    fallbackModel = "openai/gpt-image-1";
+    primaryModel = MODEL_SEEDREAM;
+    fallbackModel = MODEL_OPENAI;
   } else if (categoryLower.includes("comic")) {
-    primaryModel = "openai/gpt-image-1";
-    fallbackModel = "bytedance/seedream-4-5";
+    primaryModel = MODEL_OPENAI;
+    fallbackModel = MODEL_SEEDREAM;
   } else if (categoryLower.includes("book")) {
-    primaryModel = "openai/gpt-image-1";
-    fallbackModel = "bytedance/seedream-4-5";
+    primaryModel = MODEL_OPENAI;
+    fallbackModel = MODEL_SEEDREAM;
   } else if (categoryLower.includes("tv") || categoryLower.includes("show")) {
-    primaryModel = "bytedance/seedream-4-5";
-    fallbackModel = "openai/gpt-image-1";
+    primaryModel = MODEL_SEEDREAM;
+    fallbackModel = MODEL_OPENAI;
   } else if (categoryLower.includes("movie") || categoryLower.includes("film")) {
-    primaryModel = "openai/gpt-image-1";
-    fallbackModel = "bytedance/seedream-4-5";
+    primaryModel = MODEL_OPENAI;
+    fallbackModel = MODEL_SEEDREAM;
   } else if (categoryLower.includes("folklore") || categoryLower.includes("myth")) {
-    primaryModel = "bytedance/seedream-4-5";
-    fallbackModel = "openai/gpt-image-1";
+    primaryModel = MODEL_SEEDREAM;
+    fallbackModel = MODEL_OPENAI;
   } else {
-    // Default - anime-style by default
-    primaryModel = "openai/gpt-image-1";
-    fallbackModel = "bytedance/seedream-4-5";
+    primaryModel = MODEL_OPENAI;
+    fallbackModel = MODEL_SEEDREAM;
   }
 
   const url = "https://api.aimlapi.com/v1/images/generations";
@@ -422,7 +424,7 @@ async function generateImageWithOpenAI({ prompt, seed = 42, width = 768, height 
       const body = {
         model: model,
         prompt: sanitizedPrompt,
-        ...(model.startsWith("openai/") ? { response_format: "b64_json" } : {}),
+        // AIMLAPI gpt-image-1 can return a CDN url; response_format b64_json is optional
       };
 
       console.log("AI-Image: Body enviado:", JSON.stringify({ model, promptLength: sanitizedPrompt.length }));
