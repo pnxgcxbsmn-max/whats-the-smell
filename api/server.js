@@ -424,7 +424,7 @@ async function generateImageWithOpenAI({ prompt, seed = 42, width = 768, height 
       const body = {
         model: model,
         prompt: sanitizedPrompt,
-        // AIMLAPI gpt-image-1 can return a CDN url; response_format b64_json is optional
+        response_format: "b64_json", // prefer base64 to avoid flaky CDN fetches
       };
 
       console.log("AI-Image: Body enviado:", JSON.stringify({ model, promptLength: sanitizedPrompt.length }));
@@ -463,17 +463,17 @@ async function generateImageWithOpenAI({ prompt, seed = 42, width = 768, height 
         continue; // Try next model
       }
 
-      const urlOut = first?.url || (typeof first === "string" ? first : null);
-      if (urlOut) {
-        console.log("AI-Image: URL obtenida de", model, ":", String(urlOut).slice(0, 50) + "...");
-        return { kind: "url", value: String(urlOut) };
-      }
-
-      const b64 = first?.b64_json || first?.b64;
+      const b64 = first?.b64_json || first?.b64 || first?.base64;
       if (b64) {
         const cleaned = String(b64).replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/, "");
         console.log("AI-Image: Base64 obtenido de", model);
         return { kind: "b64", value: cleaned, contentType: "image/png" };
+      }
+
+      const urlOut = first?.url || (typeof first === "string" ? first : null);
+      if (urlOut) {
+        console.log("AI-Image: URL obtenida de", model, ":", String(urlOut).slice(0, 50) + "...");
+        return { kind: "url", value: String(urlOut) };
       }
 
       console.warn(`AI-Image: Sin payload válido en ${model}:`, JSON.stringify(first).slice(0, 250));
@@ -1158,19 +1158,20 @@ app.get("/api/ai-image", async (req, res) => {
       const errorMsg = String(jobErr?.message || jobErr);
       console.error("[IMG] Job failed:", errorMsg);
       
-      // FALLBACK: Try to find any existing generated image to use as placeholder
-      console.log("[IMG] Intentando fallback desde generated/");
-      const allGenerated = fs.readdirSync(GENERATED_DIR).filter(f => f.endsWith('.webp'));
-      if (allGenerated.length > 0) {
-        const fallbackFile = allGenerated[Math.floor(Math.random() * allGenerated.length)];
+      // FALLBACK: only use a cached image if it matches this character; no random images
+      console.log("[IMG] Intentando fallback específico desde generated/");
+      const safeName = sanitizeFilename(name);
+      const matchFiles = fs.readdirSync(GENERATED_DIR).filter(f => f.startsWith(`${safeName}.`) && f.endsWith('.webp'));
+      if (matchFiles.length > 0) {
+        const fallbackFile = matchFiles[0]; // deterministic
         const fallbackUrl = `/generated/${fallbackFile}`;
-        console.log("[IMG] Fallback usando cache existente:", fallbackUrl);
+        console.log("[IMG] Fallback usando cache del personaje:", fallbackUrl);
         return res.json({ 
           ok: true,
           imageUrl: fallbackUrl, 
           cached: true, 
           provider: "fallback",
-          warning: "Used cached image as fallback due to generation error"
+          warning: "Used cached image for character due to generation error"
         });
       }
       
