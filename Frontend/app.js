@@ -2767,6 +2767,7 @@ function updateCarouselFocus() {
     const frame = document.querySelector('.imgFrame');
     if (frame) frame.classList.remove("spinning");
     el.characterImg.classList.remove("is-visible");
+    closeDetailPanel();
 
     state.busy = false;
     state.hasResult = false;

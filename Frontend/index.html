@@ -75,7 +75,16 @@
     
   --fieldW: 260px;
   --fieldH: 44px;
-  --trailBgImg: url("assets/buttons/new-trail-bg.png");}
+  --trailBgImg: url("assets/buttons/new-trail-bg.png");
+  --glass-bg: rgba(255,255,255,.08);
+  --glass-bg-strong: rgba(255,255,255,.12);
+  --glass-border: rgba(255,255,255,.12);
+  --glass-border-soft: rgba(255,255,255,.08);
+  --glass-shadow: 0 12px 36px rgba(0,0,0,.45);
+  --glass-shadow-soft: 0 8px 24px rgba(0,0,0,.35);
+  --glass-inset: inset 0 1px 0 rgba(255,255,255,.12);
+  --glass-glow: 0 0 0 1px rgba(120,160,255,.22), 0 0 16px rgba(120,160,255,.18);
+}
 
     *{ box-sizing:border-box; }
 
@@ -553,9 +562,9 @@
   height: var(--fieldH);
   padding: 0 12px;
   border-radius: 14px;
-  border: 1px solid rgba(100, 200, 255, 0.35);
+  border: 1px solid var(--glass-border);
   background:
-    linear-gradient(180deg, rgba(12,18,34,.30), rgba(10,16,30,.21)),
+    linear-gradient(180deg, rgba(12,18,34,.40), rgba(10,16,30,.28)),
     var(--trailBgImg);
   background-size: cover;
   background-position: center;
@@ -564,7 +573,9 @@
   font-size:14px;
   outline:none;
   font-weight: 600;
-  transition: border-color 180ms ease, filter 180ms ease;
+  backdrop-filter: blur(12px);
+  box-shadow: var(--glass-shadow-soft), var(--glass-inset);
+  transition: border-color 220ms ease, filter 220ms ease, transform 220ms ease, box-shadow 220ms ease;
 }
 
     /* State clarity: visual feedback when input is empty */
@@ -573,8 +584,21 @@
     }
 
     input:not(:placeholder-shown){
-      border-color: rgba(100, 200, 255, 0.55);
+      border-color: rgba(120, 180, 255, 0.45);
       filter: brightness(1);
+    }
+
+    input:focus{
+      border-color: rgba(140, 180, 255, 0.7);
+      box-shadow: var(--glass-shadow), var(--glass-inset), var(--glass-glow);
+    }
+
+    @media(hover:hover){
+      input:hover{
+        transform: translateY(-1px);
+        box-shadow: 0 12px 30px rgba(0,0,0,.42), var(--glass-inset);
+      }
+    }
     }
 
     input::placeholder{ 
@@ -1800,11 +1824,34 @@
     .feedback-fields textarea{
       flex:1 1 200px;
       border-radius:12px;
-      border:1px solid rgba(255,255,255,.18);
-      background:rgba(10,16,30,.45);
+      border:1px solid var(--glass-border);
+      background:rgba(12,18,34,.48);
       color:#fff;
       padding:10px 12px;
       font-size:13px;
+      backdrop-filter: blur(12px);
+      box-shadow: var(--glass-shadow-soft), var(--glass-inset);
+      transition: border-color 220ms ease, box-shadow 220ms ease, transform 220ms ease;
+    }
+
+    .library-controls input:focus,
+    .library-controls select:focus,
+    .feedback-fields input:focus,
+    .feedback-fields select:focus,
+    .feedback-fields textarea:focus{
+      border-color: rgba(140, 180, 255, 0.7);
+      box-shadow: var(--glass-shadow), var(--glass-inset), var(--glass-glow);
+      outline: none;
+    }
+
+    @media(hover:hover){
+      .library-controls input:hover,
+      .library-controls select:hover,
+      .feedback-fields input:hover,
+      .feedback-fields select:hover,
+      .feedback-fields textarea:hover{
+        transform: translateY(-1px);
+      }
     }
 
     .library-list,
@@ -1820,13 +1867,20 @@
     }
 
     .library-item{
-      border:1px solid rgba(255,255,255,.12);
-      border-radius:14px;
-      padding:12px;
-      background:rgba(255,255,255,.06);
-      display:flex;
-      flex-direction:column;
-      gap:8px;
+    .card,
+    .notesBlock,
+    .charSheetBlock,
+    .library-item,
+    .favorites-list .library-item{
+      border:1px solid var(--glass-border-soft);
+      border-image: linear-gradient(135deg, rgba(255,255,255,0.25), rgba(255,255,255,0.05)) 1;
+      box-shadow: var(--glass-shadow), var(--glass-inset);
+      animation: panelFade 300ms ease both;
+    }
+
+    @keyframes panelFade{
+      0%{ opacity:0; transform: translateY(6px); }
+      100%{ opacity:1; transform: translateY(0); }
     }
 
     .library-item-header{
@@ -1842,6 +1896,7 @@
     }
 
     .pill-btn{
+    .pill-btn{
       border-radius:999px;
       border:1px solid rgba(255,255,255,.2);
       background:rgba(255,255,255,.08);
@@ -1849,6 +1904,19 @@
       font-size:12px;
       padding:6px 10px;
       cursor:pointer;
+      box-shadow: 0 6px 16px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.16);
+      transition: transform 180ms ease, box-shadow 180ms ease, filter 180ms ease;
+    }
+
+    @media(hover:hover){
+      .pill-btn:hover{
+        transform: translateY(-1px);
+        box-shadow: 0 10px 22px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.18);
+      }
+    }
+
+    .pill-btn:active{
+      transform: translateY(1px);
     }
 
     .pill-btn.danger{ border-color:rgba(255,120,120,.6); color:#ffb0b0; }
@@ -2466,6 +2534,16 @@ color: rgba(245,250,255,.96) !important;
     height:100%;
     object-fit:cover;
     display:block;
+  }
+
+  @media(max-width:640px){
+    .card,
+    .notesBlock,
+    .charSheetBlock,
+    .library-item,
+    .favorites-list .library-item{
+      box-shadow: 0 8px 24px rgba(0,0,0,.35), var(--glass-inset);
+    }
   }
 
   .library-thumb .thumb-badge{
