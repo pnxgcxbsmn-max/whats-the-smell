@@ -37,6 +37,10 @@
     ? crypto.randomUUID()
     : `wts-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
+  const DESKTOP_QUERY = window.matchMedia("(min-width: 768px)");
+  const isDesktop = () => DESKTOP_QUERY.matches;
+  const isMobile = () => !DESKTOP_QUERY.matches;
+
   // ===== DOM =====
   const el = {
     langSelect: document.getElementById("langSelect"),
@@ -93,6 +97,7 @@
     drawerBackdrop: document.getElementById("drawerBackdrop"),
     drawerButtons: document.querySelectorAll(".drawer-link"),
     drawerHeading: document.getElementById("drawerHeading"),
+    drawerCloseBtn: document.getElementById("drawerCloseBtn"),
     drawerLibraryBadge: document.getElementById("drawerLibraryBadge"),
     tabLibraryBadge: document.getElementById("tabLibraryBadge"),
     imagePlaceholder: document.getElementById("imagePlaceholder"),
@@ -811,6 +816,9 @@ async function tryLoadCachedGeneratedImage(charName) {
     if (el.drawerBackdrop) {
       el.drawerBackdrop.addEventListener("click", closeDrawer);
     }
+    if (el.drawerCloseBtn) {
+      el.drawerCloseBtn.addEventListener("click", closeDrawer);
+    }
     if (el.drawerButtons) {
       el.drawerButtons.forEach((btn) => {
         btn.addEventListener("click", () => {
@@ -822,7 +830,7 @@ async function tryLoadCachedGeneratedImage(charName) {
   }
 
   function animateDetailLift(originEl) {
-    if (!originEl || !document.body) return;
+    if (!originEl || !document.body || isDesktop()) return;
     const rect = originEl.getBoundingClientRect();
     const clone = document.createElement("div");
     clone.className = "detail-lift-clone";
@@ -849,6 +857,16 @@ async function tryLoadCachedGeneratedImage(charName) {
   }
 
   function openDetailPanel(originEl = null) {
+    updateDetailActionsVisibility();
+    if (isDesktop()) {
+      if (el.detailCard) {
+        el.detailCard.classList.remove("panel-lift");
+        void el.detailCard.offsetWidth;
+        el.detailCard.classList.add("panel-lift");
+        setTimeout(() => el.detailCard?.classList.remove("panel-lift"), 420);
+      }
+      return;
+    }
     document.body.classList.add("show-detail");
     document.body.classList.add("detail-animating");
     if (originEl) {
@@ -859,6 +877,32 @@ async function tryLoadCachedGeneratedImage(charName) {
 
   function closeDetailPanel() {
     document.body.classList.remove("show-detail");
+    updateDetailActionsVisibility();
+  }
+
+  function updateDetailActionsVisibility() {
+    const hasResult = !!state.hasResult && !!state.detail;
+    const showFavorite = hasResult;
+    const showDownload = hasResult && isDesktop();
+    const showCapture = hasResult && isMobile();
+    const showBack = hasResult && isMobile();
+    const showClose = hasResult && isMobile();
+
+    if (el.favoriteToggle) {
+      el.favoriteToggle.classList.toggle("is-visible", showFavorite);
+    }
+    if (el.detailDownloadBtn) {
+      el.detailDownloadBtn.style.display = showDownload ? "inline-flex" : "none";
+    }
+    if (el.detailCaptureBtn) {
+      el.detailCaptureBtn.style.display = showCapture ? "inline-flex" : "none";
+    }
+    if (el.detailBackBtn) {
+      el.detailBackBtn.style.display = showBack ? "inline-flex" : "none";
+    }
+    if (el.detailCloseBtn) {
+      el.detailCloseBtn.style.display = showClose ? "block" : "none";
+    }
   }
 
   // ===== UI copy =====
@@ -1716,6 +1760,7 @@ function updateCarouselFocus() {
         state.detail = null;
         state.hasResult = false;
         updateFavoriteToggle();
+        updateDetailActionsVisibility();
         closeDetailPanel();
         setOutput("");
         applyLocks();
@@ -2223,6 +2268,7 @@ function updateCarouselFocus() {
     state.hasResult = true;
     applyLocks();
     updateFavoriteToggle();
+    updateDetailActionsVisibility();
   }
 
   function buildEntryFromState(overrides = {}) {
@@ -2576,6 +2622,7 @@ function updateCarouselFocus() {
     // Set curiosity from result
     setCuriosityForCharacter(detail.characterName || state.lastCharacter);
     updateFavoriteToggle();
+    updateDetailActionsVisibility();
   }
 
   // ===== Actions =====
@@ -2735,6 +2782,7 @@ function updateCarouselFocus() {
     state.detailSource = "none";
     state.currentImageUrl = "";
     updateFavoriteToggle();
+    updateDetailActionsVisibility();
     
     // Limpiar inputs
     el.characterInput.value = "";
@@ -2878,6 +2926,7 @@ function updateCarouselFocus() {
       state.libraryHasNew = false;
     }
     updateLibraryBadge();
+    updateDetailActionsVisibility();
 
     // Category init
     fillCategorySelectHidden();
@@ -2898,6 +2947,11 @@ function updateCarouselFocus() {
     bindFavoriteToggle();
     bindFeedbackForm();
     initLibrary();
+
+    DESKTOP_QUERY.addEventListener("change", () => {
+      updateDetailActionsVisibility();
+      closeDetailPanel();
+    });
 
     el.smellBtn.addEventListener("click", onGenerate);
     el.clearBtn.addEventListener("click", onClear);
@@ -2926,7 +2980,7 @@ function updateCarouselFocus() {
     }
 
     document.addEventListener("click", (evt) => {
-      if (!document.body.classList.contains("show-detail")) return;
+      if (!document.body.classList.contains("show-detail") || isDesktop()) return;
       const card = el.detailCard;
       if (!card) return;
       if (!card.contains(evt.target)) {
@@ -2952,6 +3006,7 @@ function updateCarouselFocus() {
     });
 
     applyLocks();
+    updateDetailActionsVisibility();
 
     // ===== Zoom-based Visibility System =====
     // Hide footer when zoom >= 150%, show when zoom < 150%
