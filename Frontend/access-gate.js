@@ -7,10 +7,14 @@
   const LIMIT_WINDOW = 24 * 60 * 60 * 1000; // 24h
   const GENERATION_LIMIT = 10;
 
-  const BETA_PASSWORD = String(window.WTS_BETA_PASSWORD || "reymono95").trim();
+  const DEFAULT_BETA_PASSWORD = "reymono95";
+  const OVERRIDE_BETA_PASSWORD = typeof window.WTS_BETA_PASSWORD === "string"
+    ? window.WTS_BETA_PASSWORD.trim()
+    : "";
+  const ALLOWED_PASSWORDS = new Set([DEFAULT_BETA_PASSWORD, OVERRIDE_BETA_PASSWORD].filter(Boolean));
 
-  if (!BETA_PASSWORD) {
-    console.warn("%c[ACCESS-GATE] BETA_PASSWORD is empty; gate will reject all logins", "color: red; font-size: 12px;");
+  if (ALLOWED_PASSWORDS.size === 0) {
+    console.warn("%c[ACCESS-GATE] No valid beta passwords configured; gate will reject all logins", "color: red; font-size: 12px;");
   }
 
   const TRANSLATIONS = {
@@ -236,7 +240,7 @@
       const password = String(input.value || "").trim();
       errorDiv.style.display = "none";
 
-      if (!BETA_PASSWORD || password !== BETA_PASSWORD) {
+      if (!ALLOWED_PASSWORDS.has(password)) {
         errorDiv.textContent = t.error;
         errorDiv.style.display = "block";
         input.value = "";
