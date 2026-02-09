@@ -52,13 +52,11 @@
     characterInput: document.getElementById("characterInput"),
 
     categoryLabel: document.getElementById("categoryLabel"),
-    categorySelect: document.getElementById("categorySelect"),
     categoryDD: document.getElementById("categoryDD"),
     categoryBtn: document.getElementById("categoryBtn"),
-    categoryArrowLeft: document.getElementById("categoryArrowLeft"),
-    categoryArrowRight: document.getElementById("categoryArrowRight"),
     categoryValue: document.getElementById("categoryValue"),
-    categoryValueActive: document.getElementById("categoryValueActive"),
+    categoryPanel: document.getElementById("categoryPanel"),
+    categoryList: document.getElementById("categoryList"),
 
     smellBtn: document.getElementById("smellBtn"),
     clearBtn: document.getElementById("clearBtn"),
@@ -92,6 +90,7 @@
     appTabs: document.getElementById("appTabs"),
     appViews: document.querySelectorAll(".app-view"),
     tabButtons: document.querySelectorAll(".app-tab-btn"),
+    appGrid: document.getElementById("appGrid"),
     navDrawerToggle: document.getElementById("navDrawerToggle"),
     desktopDrawer: document.getElementById("desktopDrawer"),
     drawerBackdrop: document.getElementById("drawerBackdrop"),
@@ -113,11 +112,14 @@
     feedbackForm: document.getElementById("feedbackForm"),
     feedbackType: document.getElementById("feedbackType"),
     feedbackDescription: document.getElementById("feedbackDescription"),
-    feedbackAttachScreenshot: document.getElementById("feedbackAttachScreenshot"),
     feedbackContact: document.getElementById("feedbackContact"),
-    feedbackCaptureBtn: document.getElementById("feedbackCaptureBtn"),
     feedbackClearScreenshot: document.getElementById("feedbackClearScreenshot"),
     feedbackScreenshotLabel: document.getElementById("feedbackScreenshotLabel"),
+    feedbackFileInput: document.getElementById("feedbackFileInput"),
+    feedbackPreview: document.getElementById("feedbackPreview"),
+    feedbackPreviewImg: document.getElementById("feedbackPreviewImg"),
+    feedbackUploadLabel: document.getElementById("feedbackUploadLabel"),
+    feedbackContactRow: document.getElementById("feedbackContactRow"),
     feedbackStatus: document.getElementById("feedbackStatus"),
     feedbackSubmitBtn: document.getElementById("feedbackSubmitBtn"),
     detailCard: document.getElementById("detailCard"),
@@ -127,6 +129,7 @@
     detailBackBtn: document.getElementById("detailBackBtn"),
     detailDownloadBtn: document.getElementById("detailDownloadBtn"),
     detailCaptureBtn: document.getElementById("detailCaptureBtn"),
+    langOverlay: document.getElementById("langOverlay"),
   };
 
   // ===== Guard: if DOM missing, stop gracefully =====
@@ -242,17 +245,17 @@
       feedbackContactLabel: "Contact (optional)",
       feedbackContactPlaceholder: "email or handle",
       feedbackDescriptionPlaceholder: "Tell us what to improve or what went wrong",
-      feedbackAttachLabel: "Attach screenshot automatically",
+      feedbackUploadLabel: "Upload screenshot",
       feedbackSubmit: "Send",
       feedbackThanks: "Thanks! We'll review your note shortly.",
       feedbackError: "Couldn't send feedback. Try again in a moment.",
       feedbackMissingDescription: "Please describe your feedback.",
-      feedbackCapture: "Capture screenshot",
-      feedbackCaptureRemove: "Remove screenshot",
-      feedbackScreenshotReady: "Screenshot attached",
-      feedbackScreenshotEmpty: "No screenshot yet",
-      feedbackScreenshotFailed: "Capture failed. Try again.",
-      feedbackScreenshotTooLarge: "Screenshot too large. Try again.",
+      feedbackCapture: "Upload screenshot",
+      feedbackCaptureRemove: "Remove upload",
+      feedbackScreenshotReady: "Screenshot ready",
+      feedbackScreenshotEmpty: "No file selected",
+      feedbackScreenshotInvalid: "Please choose an image file.",
+      feedbackScreenshotTooLarge: "File too large (max 5MB).",
       libraryActionView: "Open",
       libraryActionFavorite: "Favorite",
       libraryActionUnfavorite: "Unfavorite",
@@ -318,17 +321,17 @@
       feedbackContactLabel: "Contacto (opcional)",
       feedbackContactPlaceholder: "correo o usuario",
       feedbackDescriptionPlaceholder: "Cuéntanos qué mejorar o qué salió mal",
-      feedbackAttachLabel: "Adjuntar captura automática",
+      feedbackUploadLabel: "Subir captura",
       feedbackSubmit: "Enviar",
       feedbackThanks: "¡Gracias! Revisaremos tu nota pronto.",
       feedbackError: "No pudimos enviar el feedback. Intenta de nuevo.",
       feedbackMissingDescription: "Por favor describe tu feedback.",
-      feedbackCapture: "Capturar pantalla",
+      feedbackCapture: "Subir captura",
       feedbackCaptureRemove: "Quitar captura",
       feedbackScreenshotReady: "Captura lista",
-      feedbackScreenshotEmpty: "Sin captura",
-      feedbackScreenshotFailed: "Fallo al capturar. Intenta otra vez.",
-      feedbackScreenshotTooLarge: "La captura es muy pesada, vuelve a intentarlo.",
+      feedbackScreenshotEmpty: "Sin archivo",
+      feedbackScreenshotInvalid: "Elige una imagen valida.",
+      feedbackScreenshotTooLarge: "Archivo muy pesado (max 5MB).",
       libraryActionView: "Abrir",
       libraryActionFavorite: "Favorito",
       libraryActionUnfavorite: "Quitar favorito",
@@ -343,7 +346,7 @@
     },
   };
 
-  const MAX_SCREENSHOT_SIZE = 1_800_000; // ~1.5MB base64 payload guard
+  const MAX_FEEDBACK_FILE_SIZE = 5 * 1024 * 1024;
   const LIBRARY_BADGE_KEY = "wts:library:badge";
 
   // ===== Aroma Curiosities (Loading Screen) =====
@@ -425,8 +428,7 @@
     isInitialLoad: true, // Flag to skip animation on first load
     detail: null,
     detailSource: "none",
-    view: "search",
-    activeView: "search",
+    currentView: "search",
     sessionId: (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : `wts-${Date.now()}`,
     libraryItems: [],
     libraryFilters: { search: "", category: "all", sort: "recent" },
@@ -435,7 +437,8 @@
     libraryReady: false,
     libraryHasNew: false,
     drawerOpen: false,
-    feedbackScreenshot: null,
+    feedbackFile: null,
+    feedbackPreviewUrl: "",
   };
 
   // ===== Helpers =====
@@ -519,7 +522,7 @@ async function tryLoadCachedGeneratedImage(charName) {
     
     // IMPORTANT: Cerrar dropdown cuando hay error para evitar estado inconsistente
     if (state.ddOpen) {
-      ddClose();
+      closeCategoryPanel();
     }
   }
   function clearError() {
@@ -716,8 +719,7 @@ async function tryLoadCachedGeneratedImage(charName) {
 
   function setView(viewName) {
     const next = VIEW_KEYS.includes(viewName) ? viewName : "search";
-    state.view = next;
-    state.activeView = next;
+    state.currentView = next;
 
     if (el.appViews) {
       el.appViews.forEach((section) => {
@@ -758,6 +760,10 @@ async function tryLoadCachedGeneratedImage(charName) {
       closeDrawer();
     }
 
+    if (state.ddOpen) {
+      closeCategoryPanel();
+    }
+
     updateViewLayout();
   }
 
@@ -791,7 +797,7 @@ async function tryLoadCachedGeneratedImage(charName) {
     el.navDrawerToggle?.setAttribute("aria-expanded", "true");
     document.body.classList.add("drawer-open");
     document.addEventListener("keydown", handleDrawerKeydown);
-    const activeBtn = Array.from(el.drawerButtons || []).find((btn) => (btn.dataset.view || "") === state.view);
+    const activeBtn = Array.from(el.drawerButtons || []).find((btn) => (btn.dataset.view || "") === state.currentView);
     (activeBtn || (el.drawerButtons && el.drawerButtons[0]))?.focus?.();
   }
 
@@ -884,8 +890,11 @@ async function tryLoadCachedGeneratedImage(charName) {
 
   function updateViewLayout() {
     if (!el.detailCard) return;
-    const showVisual = isDesktop() || state.view === "search";
+    const showVisual = state.currentView === "search";
     el.detailCard.style.display = showVisual ? "" : "none";
+    if (el.appGrid) {
+      el.appGrid.classList.toggle("single-column", !showVisual);
+    }
   }
 
   function updateDetailActionsVisibility() {
@@ -959,6 +968,13 @@ async function tryLoadCachedGeneratedImage(charName) {
     el.langSwitch.setAttribute("aria-checked", isEn ? "true" : "false");
   }
 
+  function triggerLangOverlay() {
+    if (!el.langOverlay) return;
+    el.langOverlay.classList.remove("is-active");
+    void el.langOverlay.offsetWidth;
+    el.langOverlay.classList.add("is-active");
+  }
+
   function applyStaticText() {
     // Sheet labels + curiosity title
     const ln = curLang();
@@ -1013,13 +1029,10 @@ async function tryLoadCachedGeneratedImage(charName) {
     setText("feedbackTypeOther", "feedbackTypeOther");
     setText("feedbackContactLabel", "feedbackContactLabel");
     setText("feedbackDescriptionLabel", "feedbackDescriptionLabel");
-    setText("feedbackAttachLabel", "feedbackAttachLabel");
+    setText("feedbackUploadLabel", "feedbackUploadLabel");
 
     if (el.feedbackSubmitBtn) {
       el.feedbackSubmitBtn.textContent = t("feedbackSubmit");
-    }
-    if (el.feedbackCaptureBtn) {
-      el.feedbackCaptureBtn.textContent = t("feedbackCapture");
     }
     if (el.feedbackClearScreenshot) {
       el.feedbackClearScreenshot.textContent = t("feedbackCaptureRemove");
@@ -1043,7 +1056,6 @@ async function tryLoadCachedGeneratedImage(charName) {
     // Category display
     const label = categoryLabelFor(state.selectedCategory);
     el.categoryValue.textContent = label;
-    if (el.categoryValueActive) el.categoryValueActive.textContent = label;
   }
 
   // ===== Locks =====
@@ -1060,7 +1072,7 @@ async function tryLoadCachedGeneratedImage(charName) {
     el.categoryBtn.disabled = shouldLockInputs;
     el.clearBtn.disabled = state.busy;
 
-    if (state.busy) ddClose();
+    if (state.busy) closeCategoryPanel();
   }
   function setBusy(v) {
     state.busy = !!v;
@@ -1086,195 +1098,86 @@ async function tryLoadCachedGeneratedImage(charName) {
   }
 
   // ===== Dropdown =====
-  function fillCategorySelectHidden() {
-    const prev = state.selectedCategory || "any";
-    el.categorySelect.innerHTML = "";
-    for (const c of CATEGORIES) {
-      const opt = document.createElement("option");
-      opt.value = c.id;
-      opt.textContent = categoryLabelFor(c.id);
-      el.categorySelect.appendChild(opt);
-    }
-    el.categorySelect.value = CATEGORIES.some((x) => x.id === prev) ? prev : "any";
-  }
-
   function setCategoryValue(id) {
     const next = CATEGORIES.some((x) => x.id === id) ? id : "any";
     state.selectedCategory = next;
-    el.categorySelect.value = next;
-
     const label = categoryLabelFor(next);
-    el.categoryValue.textContent = label;
-    if (el.categoryValueActive) el.categoryValueActive.textContent = label;
-
+    if (el.categoryValue) el.categoryValue.textContent = label;
     state.focusIndex = Math.max(0, CATEGORIES.findIndex((x) => x.id === next));
+    renderCategoryOptions();
   }
 
-  function ddOpen() {
-    // No-op: carousel is always open
+  function renderCategoryOptions() {
+    if (!el.categoryList) return;
+    el.categoryList.innerHTML = "";
+    CATEGORIES.forEach((cat) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "ddOption";
+      btn.dataset.value = cat.id;
+      btn.setAttribute("role", "option");
+      btn.textContent = categoryLabelFor(cat.id);
+      if (cat.id === state.selectedCategory) {
+        btn.classList.add("is-selected");
+        btn.setAttribute("aria-selected", "true");
+      } else {
+        btn.setAttribute("aria-selected", "false");
+      }
+      el.categoryList.appendChild(btn);
+    });
   }
 
-  function ddClose() {
-    // No-op: carousel is always open
+  function openCategoryPanel() {
+    if (!el.categoryDD || !el.categoryBtn) return;
+    state.ddOpen = true;
+    el.categoryDD.classList.add("open");
+    el.categoryBtn.setAttribute("aria-expanded", "true");
+    el.categoryPanel?.focus?.();
   }
 
-  function ddToggle() {
-    // No-op: carousel is always open
+  function closeCategoryPanel() {
+    if (!el.categoryDD || !el.categoryBtn) return;
+    state.ddOpen = false;
+    el.categoryDD.classList.remove("open");
+    el.categoryBtn.setAttribute("aria-expanded", "false");
   }
-
-  function ddMove(delta) {
-    const len = CATEGORIES.length;
-    console.log(`[Carousel] Moving ${delta > 0 ? 'right' : 'left'}, category count: ${len}, current index: ${state.focusIndex}`);
-    console.log(`[Carousel] Categories available:`, CATEGORIES.map(c => c.id));
-    state.focusIndex = (state.focusIndex + delta + len) % len;
-    const nextId = CATEGORIES[state.focusIndex].id;
-    console.log(`[Carousel] New index: ${state.focusIndex}, ID: ${nextId}`);
-    setCategoryValue(nextId);
-    renderCategoryCarousel();
-  }
-
-  
-function renderCategoryCarousel() {
-  // v7: "Arrow + confirm" UX (no rail items overlay).
-  // The previous ddRail/ddItem carousel could block pointer hitboxes on the viewport in some browsers.
-  // We keep the drawer minimal: arrows + active label only.
-  const label = categoryLabelFor(state.selectedCategory);
-  if (el.categoryValueActive) {
-    el.categoryValueActive.textContent = label;
-    console.log(`[Carousel] Rendered category: ${state.selectedCategory} (${label}), focusIndex: ${state.focusIndex}`);
-  }
-}
-
-function updateCarouselFocus() {
-  // no-op (kept for backward compatibility)
-}
 
   function bindCategoryDropdown() {
-    // Generate carousel items
-    renderCategoryCarousel();
-    console.log(`[Carousel] Initialized with ${CATEGORIES.length} categories`);
+    renderCategoryOptions();
 
-    if (el.categorySelect) {
-      el.categorySelect.addEventListener("change", (e) => {
-        setCategoryValue(e.target.value || "any");
-      });
-    }
-
-    // Toggle "active" mode to show/hide carousel controls
-    function setCategoryActive(on) {
-      const isOn = !!on;
-      state.ddOpen = isOn;
-      if (el.categoryBtn) {
-        el.categoryBtn.classList.toggle("active", isOn);
-        console.log(`[Carousel] Active mode: ${isOn}`);
-      }
-    }
-
-    function confirmCategory() {
-      if (!el.categoryBtn) return;
-      el.categoryBtn.classList.add("confirm");
-      setTimeout(() => el.categoryBtn.classList.remove("confirm"), 180);
-      setCategoryActive(false);
-    }
-
-    // Arrow clicks - LEFT (only when active)
-    if (el.categoryArrowLeft) {
-      el.categoryArrowLeft.addEventListener("click", (e) => {
-        console.log("[Carousel] Left arrow clicked");
-        e.preventDefault();
-        e.stopPropagation();
-        ddMove(-1);
-      });
-      console.log("[Carousel] Left arrow listener attached");
-    }
-
-    // Arrow clicks - RIGHT (only when active)
-    if (el.categoryArrowRight) {
-      el.categoryArrowRight.addEventListener("click", (e) => {
-        console.log("[Carousel] Right arrow clicked");
-        e.preventDefault();
-        e.stopPropagation();
-        ddMove(1);
-      });
-      console.log("[Carousel] Right arrow listener attached");
-    }
-
-    // Center button - confirms selection
-    if (el.categoryValueActive) {
-      el.categoryValueActive.addEventListener("click", (e) => {
-        console.log("[Carousel] Center clicked, confirming:", state.selectedCategory);
-        e.preventDefault();
-        e.stopPropagation();
-        confirmCategory();
-      });
-      console.log("[Carousel] Center value listener attached");
-    }
-
-    // Button click - toggle active mode
     if (el.categoryBtn) {
       el.categoryBtn.addEventListener("click", (e) => {
-        const t = e.target;
-        // Don't activate if clicking arrows or center
-        if (
-          t === el.categoryArrowLeft ||
-          t === el.categoryArrowRight ||
-          t === el.categoryValueActive
-        ) {
-          return;
-        }
-        
         e.preventDefault();
         e.stopPropagation();
-        
-        const isActive = el.categoryBtn.classList.contains("active");
-        setCategoryActive(!isActive);
-        if (!isActive) {
-          el.categoryBtn.focus?.();
-        }
+        if (state.ddOpen) closeCategoryPanel();
+        else openCategoryPanel();
       });
-      console.log("[Carousel] Button click listener attached");
     }
 
-    // Keyboard navigation (only when active)
-    document.addEventListener("keydown", (e) => {
-      const isActive = el.categoryBtn?.classList.contains("active");
-      if (!isActive) return;
+    if (el.categoryList) {
+      el.categoryList.addEventListener("click", (e) => {
+        const target = e.target.closest(".ddOption");
+        if (!target) return;
+        const value = target.dataset.value || "any";
+        setCategoryValue(value);
+        closeCategoryPanel();
+      });
+    }
 
-      if (e.key === "ArrowLeft") {
-        e.preventDefault();
-        ddMove(-1);
-        return;
+    document.addEventListener("click", (e) => {
+      if (!state.ddOpen) return;
+      if (el.categoryDD && !el.categoryDD.contains(e.target)) {
+        closeCategoryPanel();
       }
-      if (e.key === "ArrowRight") {
-        e.preventDefault();
-        ddMove(1);
-        return;
-      }
-      if (e.key === "Enter") {
-        e.preventDefault();
-        confirmCategory();
-        return;
-      }
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (!state.ddOpen) return;
       if (e.key === "Escape") {
         e.preventDefault();
-        setCategoryActive(false);
-        return;
+        closeCategoryPanel();
       }
     });
-
-    // Click outside to close
-    document.addEventListener("click", (e) => {
-      const isActive = el.categoryBtn?.classList.contains("active");
-      if (!isActive) return;
-
-      const categoryWrap = document.getElementById("categoryDD");
-      if (categoryWrap && !categoryWrap.contains(e.target)) {
-        setCategoryActive(false);
-        console.log("[Carousel] Closed by outside click");
-      }
-    });
-
-    console.log("[Carousel] Keyboard listeners attached");
   }
 
   
@@ -1839,9 +1742,20 @@ function updateCarouselFocus() {
     el.feedbackStatus.dataset.mode = mode;
   }
 
+  function updateFeedbackContactVisibility() {
+    const selectedType = document.querySelector('input[name="feedbackType"]:checked');
+    const showContact = (selectedType?.value || "") === "other";
+    if (el.feedbackContactRow) {
+      el.feedbackContactRow.classList.toggle("is-hidden", !showContact);
+    }
+    if (!showContact && el.feedbackContact) {
+      el.feedbackContact.value = "";
+    }
+  }
+
   function updateScreenshotLabel() {
     if (!el.feedbackScreenshotLabel) return;
-    if (state.feedbackScreenshot) {
+    if (state.feedbackFile) {
       el.feedbackScreenshotLabel.textContent = t("feedbackScreenshotReady");
       el.feedbackClearScreenshot?.removeAttribute("hidden");
     } else {
@@ -1851,39 +1765,60 @@ function updateCarouselFocus() {
   }
 
   function clearFeedbackScreenshot() {
-    state.feedbackScreenshot = null;
+    if (state.feedbackPreviewUrl) {
+      URL.revokeObjectURL(state.feedbackPreviewUrl);
+      state.feedbackPreviewUrl = "";
+    }
+    state.feedbackFile = null;
+    if (el.feedbackFileInput) {
+      el.feedbackFileInput.value = "";
+    }
+    if (el.feedbackPreview) {
+      el.feedbackPreview.setAttribute("hidden", "true");
+    }
+    if (el.feedbackPreviewImg) {
+      el.feedbackPreviewImg.removeAttribute("src");
+    }
     updateScreenshotLabel();
   }
 
-  async function captureFeedbackScreenshot() {
-    if (typeof html2canvas !== "function") {
-      throw new Error("missingLib");
+  function setFeedbackFile(file) {
+    if (!file) {
+      clearFeedbackScreenshot();
+      return;
     }
-    const target = document.getElementById("appShell") || document.body;
-    const canvas = await html2canvas(target, {
-      backgroundColor: "#0b0f1a",
-      useCORS: true,
-      logging: false,
-      scale: Math.min(window.devicePixelRatio || 1.5, 2),
-    });
-    let quality = 0.8;
-    let dataUrl = canvas.toDataURL("image/jpeg", quality);
-    while (dataUrl.length > MAX_SCREENSHOT_SIZE && quality > 0.35) {
-      quality -= 0.1;
-      dataUrl = canvas.toDataURL("image/jpeg", quality);
+    if (!file.type || !file.type.startsWith("image/")) {
+      setFeedbackStatus(t("feedbackScreenshotInvalid"), "error");
+      clearFeedbackScreenshot();
+      return;
     }
-    if (dataUrl.length > MAX_SCREENSHOT_SIZE) {
-      throw new Error("tooLarge");
+    if (file.size > MAX_FEEDBACK_FILE_SIZE) {
+      setFeedbackStatus(t("feedbackScreenshotTooLarge"), "error");
+      clearFeedbackScreenshot();
+      return;
     }
-    state.feedbackScreenshot = dataUrl;
+
+    if (state.feedbackPreviewUrl) {
+      URL.revokeObjectURL(state.feedbackPreviewUrl);
+    }
+    state.feedbackFile = file;
+    state.feedbackPreviewUrl = URL.createObjectURL(file);
+    if (el.feedbackPreviewImg) {
+      el.feedbackPreviewImg.src = state.feedbackPreviewUrl;
+    }
+    if (el.feedbackPreview) {
+      el.feedbackPreview.removeAttribute("hidden");
+    }
     updateScreenshotLabel();
-    return dataUrl;
   }
 
   function setFeedbackBusy(isBusy) {
     if (!el.feedbackSubmitBtn) return;
     el.feedbackSubmitBtn.disabled = !!isBusy;
     el.feedbackSubmitBtn.textContent = isBusy ? `${t("feedbackSubmit")}…` : t("feedbackSubmit");
+    if (el.feedbackFileInput) {
+      el.feedbackFileInput.disabled = !!isBusy;
+    }
   }
 
   async function handleFeedbackSubmit(event) {
@@ -1898,36 +1833,41 @@ function updateCarouselFocus() {
     setFeedbackStatus("", "info");
     setFeedbackBusy(true);
 
-    if (!state.feedbackScreenshot && el.feedbackAttachScreenshot?.checked) {
-      try {
-        await captureFeedbackScreenshot();
-      } catch (autoErr) {
-        if (autoErr?.message === "tooLarge") {
-          setFeedbackStatus(t("feedbackScreenshotTooLarge"), "error");
-        } else {
-          setFeedbackStatus(t("feedbackScreenshotFailed"), "error");
-        }
-      }
-    }
-
     try {
       const selectedType = document.querySelector('input[name="feedbackType"]:checked');
       const feedbackCategory = selectedType ? selectedType.value : "feedback";
-      const payload = {
-        message,
-        category: feedbackCategory,
-        contact: String(el.feedbackContact?.value || "").trim(),
-        url: window.location.href,
-        userAgent: navigator.userAgent,
-        ts: Date.now(),
-        locale: curLang(),
-        sessionId: state.sessionId,
-        screenshotBase64: state.feedbackScreenshot || null,
-      };
-      await apiPost("/api/feedback", payload);
+      const includeContact = feedbackCategory === "other";
+      const contactValue = includeContact ? String(el.feedbackContact?.value || "").trim() : "";
+
+      if (state.feedbackFile) {
+        const formData = new FormData();
+        formData.append("message", message);
+        formData.append("category", feedbackCategory);
+        if (contactValue) formData.append("contact", contactValue);
+        formData.append("url", window.location.href);
+        formData.append("userAgent", navigator.userAgent);
+        formData.append("ts", String(Date.now()));
+        formData.append("locale", curLang());
+        formData.append("sessionId", state.sessionId);
+        formData.append("screenshot", state.feedbackFile, state.feedbackFile.name || "screenshot.png");
+        await apiPostFormData("/api/feedback", formData);
+      } else {
+        const payload = {
+          message,
+          category: feedbackCategory,
+          contact: contactValue,
+          url: window.location.href,
+          userAgent: navigator.userAgent,
+          ts: Date.now(),
+          locale: curLang(),
+          sessionId: state.sessionId,
+        };
+        await apiPost("/api/feedback", payload);
+      }
       setFeedbackStatus(t("feedbackThanks"), "success");
       el.feedbackForm.reset();
       clearFeedbackScreenshot();
+      updateFeedbackContactVisibility();
     } catch (err) {
       console.error("Feedback submit failed", err?.message || err);
       setFeedbackStatus(t("feedbackError"), "error");
@@ -1943,6 +1883,7 @@ function updateCarouselFocus() {
         const input = label.querySelector("input");
         label.classList.toggle("is-checked", !!input?.checked);
       });
+      updateFeedbackContactVisibility();
     };
 
     el.feedbackForm.addEventListener("submit", handleFeedbackSubmit);
@@ -1950,18 +1891,10 @@ function updateCarouselFocus() {
       input.addEventListener("change", syncChips);
     });
     syncChips();
-    if (el.feedbackCaptureBtn) {
-      el.feedbackCaptureBtn.addEventListener("click", async () => {
-        try {
-          await captureFeedbackScreenshot();
-          setFeedbackStatus(t("feedbackScreenshotReady"), "success");
-        } catch (err) {
-          if (err?.message === "tooLarge") {
-            setFeedbackStatus(t("feedbackScreenshotTooLarge"), "error");
-          } else {
-            setFeedbackStatus(t("feedbackScreenshotFailed"), "error");
-          }
-        }
+    if (el.feedbackFileInput) {
+      el.feedbackFileInput.addEventListener("change", (e) => {
+        const file = e.target.files && e.target.files[0] ? e.target.files[0] : null;
+        setFeedbackFile(file);
       });
     }
     if (el.feedbackClearScreenshot) {
@@ -2552,6 +2485,21 @@ function updateCarouselFocus() {
     return data;
   }
 
+  async function apiPostFormData(path, formData) {
+    if (!API_VALID) {
+      console.error("[APP] Invalid API base; cannot call backend:", API, "path:", path);
+      throw new Error("API base invalid. Check configuration.");
+    }
+
+    const r = await safeFetch(`${API}${path}`, {
+      method: "POST",
+      body: formData,
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data?.details || data?.error || `HTTP ${r.status}`);
+    return data;
+  }
+
   async function ensureTranslation(targetLang, isCached = false) {
     // Translate from canonical EN using server endpoint
     if (!state.resultEn) return;
@@ -2846,9 +2794,10 @@ function updateCarouselFocus() {
   async function onLanguageChange() {
     if (state.busy && !loadingActive) return; // Permitir cambio si está en carga
 
+    triggerLangOverlay();
     setLogoForLang();
     applyLangSwitchUI();
-    fillCategorySelectHidden();
+    renderCategoryOptions();
     computeCategoryButtonWidth();
     applyStaticText();
     setCuriosityForCharacter(el.characterInput.value);
@@ -2945,7 +2894,6 @@ function updateCarouselFocus() {
     updateViewLayout();
 
     // Category init
-    fillCategorySelectHidden();
     setCategoryValue("any");
     computeCategoryButtonWidth();
 
@@ -3005,7 +2953,7 @@ function updateCarouselFocus() {
       }
     });
 
-    setView(state.view);
+    setView(state.currentView);
 
     // Update button text and state when character input changes
     el.characterInput.addEventListener("input", () => {
