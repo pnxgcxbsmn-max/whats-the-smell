@@ -1,5 +1,5 @@
 
-Yimport fs from "fs";
+import fs from "fs";
 import path, { dirname } from "path";
 import { fileURLToPath } from "url";
 import { Redis } from "@upstash/redis";
