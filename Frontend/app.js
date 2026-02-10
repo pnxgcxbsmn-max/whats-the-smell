@@ -55,8 +55,10 @@
     categoryDD: document.getElementById("categoryDD"),
     categoryBtn: document.getElementById("categoryBtn"),
     categoryValue: document.getElementById("categoryValue"),
-    categoryPanel: document.getElementById("categoryPanel"),
-    categoryList: document.getElementById("categoryList"),
+    categoryArrowLeft: document.getElementById("categoryArrowLeft"),
+    categoryArrowRight: document.getElementById("categoryArrowRight"),
+    categoryRail: document.getElementById("categoryRail"),
+    categoryChips: document.getElementById("categoryChips"),
 
     smellBtn: document.getElementById("smellBtn"),
     clearBtn: document.getElementById("clearBtn"),
@@ -1104,27 +1106,42 @@ async function tryLoadCachedGeneratedImage(charName) {
     const label = categoryLabelFor(next);
     if (el.categoryValue) el.categoryValue.textContent = label;
     state.focusIndex = Math.max(0, CATEGORIES.findIndex((x) => x.id === next));
-    renderCategoryOptions();
+    syncCategoryChips();
   }
 
   function renderCategoryOptions() {
-    if (!el.categoryList) return;
-    el.categoryList.innerHTML = "";
+    if (!el.categoryChips) return;
+    el.categoryChips.innerHTML = "";
     CATEGORIES.forEach((cat) => {
       const btn = document.createElement("button");
       btn.type = "button";
-      btn.className = "ddOption";
+      btn.className = "ddChip";
       btn.dataset.value = cat.id;
       btn.setAttribute("role", "option");
       btn.textContent = categoryLabelFor(cat.id);
-      if (cat.id === state.selectedCategory) {
-        btn.classList.add("is-selected");
-        btn.setAttribute("aria-selected", "true");
-      } else {
-        btn.setAttribute("aria-selected", "false");
-      }
-      el.categoryList.appendChild(btn);
+      el.categoryChips.appendChild(btn);
     });
+    syncCategoryChips();
+  }
+
+  function syncCategoryChips() {
+    if (!el.categoryChips) return;
+    const chips = Array.from(el.categoryChips.querySelectorAll(".ddChip"));
+    chips.forEach((chip) => {
+      const isSelected = chip.dataset.value === state.selectedCategory;
+      chip.classList.toggle("is-selected", isSelected);
+      chip.setAttribute("aria-selected", isSelected ? "true" : "false");
+      if (isSelected) {
+        chip.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+      }
+    });
+  }
+
+  function moveCategory(delta) {
+    const len = CATEGORIES.length;
+    state.focusIndex = (state.focusIndex + delta + len) % len;
+    const nextId = CATEGORIES[state.focusIndex].id;
+    setCategoryValue(nextId);
   }
 
   function openCategoryPanel() {
@@ -1132,7 +1149,6 @@ async function tryLoadCachedGeneratedImage(charName) {
     state.ddOpen = true;
     el.categoryDD.classList.add("open");
     el.categoryBtn.setAttribute("aria-expanded", "true");
-    el.categoryPanel?.focus?.();
   }
 
   function closeCategoryPanel() {
@@ -1154,13 +1170,26 @@ async function tryLoadCachedGeneratedImage(charName) {
       });
     }
 
-    if (el.categoryList) {
-      el.categoryList.addEventListener("click", (e) => {
-        const target = e.target.closest(".ddOption");
+    if (el.categoryChips) {
+      el.categoryChips.addEventListener("click", (e) => {
+        const target = e.target.closest(".ddChip");
         if (!target) return;
         const value = target.dataset.value || "any";
         setCategoryValue(value);
-        closeCategoryPanel();
+      });
+    }
+
+    if (el.categoryArrowLeft) {
+      el.categoryArrowLeft.addEventListener("click", (e) => {
+        e.preventDefault();
+        moveCategory(-1);
+      });
+    }
+
+    if (el.categoryArrowRight) {
+      el.categoryArrowRight.addEventListener("click", (e) => {
+        e.preventDefault();
+        moveCategory(1);
       });
     }
 
@@ -1176,6 +1205,15 @@ async function tryLoadCachedGeneratedImage(charName) {
       if (e.key === "Escape") {
         e.preventDefault();
         closeCategoryPanel();
+        return;
+      }
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        moveCategory(-1);
+      }
+      if (e.key === "ArrowRight") {
+        e.preventDefault();
+        moveCategory(1);
       }
     });
   }
