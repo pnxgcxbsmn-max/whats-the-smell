@@ -117,14 +117,12 @@
     feedbackForm: document.getElementById("feedbackForm"),
     feedbackType: document.getElementById("feedbackType"),
     feedbackDescription: document.getElementById("feedbackDescription"),
-    feedbackContact: document.getElementById("feedbackContact"),
     feedbackClearScreenshot: document.getElementById("feedbackClearScreenshot"),
     feedbackScreenshotLabel: document.getElementById("feedbackScreenshotLabel"),
     feedbackFileInput: document.getElementById("feedbackFileInput"),
     feedbackPreview: document.getElementById("feedbackPreview"),
     feedbackPreviewImg: document.getElementById("feedbackPreviewImg"),
     feedbackUploadLabel: document.getElementById("feedbackUploadLabel"),
-    feedbackContactRow: document.getElementById("feedbackContactRow"),
     feedbackStatus: document.getElementById("feedbackStatus"),
     feedbackSubmitBtn: document.getElementById("feedbackSubmitBtn"),
     detailCard: document.getElementById("detailCard"),
@@ -263,8 +261,6 @@
       feedbackTypeAroma: "Aroma quality",
       feedbackTypeOther: "Other",
       feedbackDescriptionLabel: "Description",
-      feedbackContactLabel: "Contact (optional)",
-      feedbackContactPlaceholder: "email or handle",
       feedbackDescriptionPlaceholder: "Tell us what to improve or what went wrong",
       feedbackUploadLabel: "Upload screenshot",
       feedbackSubmit: "Send",
@@ -339,8 +335,6 @@
       feedbackTypeAroma: "Calidad del aroma",
       feedbackTypeOther: "Otro",
       feedbackDescriptionLabel: "Descripción",
-      feedbackContactLabel: "Contacto (opcional)",
-      feedbackContactPlaceholder: "correo o usuario",
       feedbackDescriptionPlaceholder: "Cuéntanos qué mejorar o qué salió mal",
       feedbackUploadLabel: "Subir captura",
       feedbackSubmit: "Enviar",
@@ -1055,7 +1049,6 @@ async function tryLoadCachedGeneratedImage(charName) {
     setText("feedbackTypeImage", "feedbackTypeImage");
     setText("feedbackTypeAroma", "feedbackTypeAroma");
     setText("feedbackTypeOther", "feedbackTypeOther");
-    setText("feedbackContactLabel", "feedbackContactLabel");
     setText("feedbackDescriptionLabel", "feedbackDescriptionLabel");
     setText("feedbackUploadLabel", "feedbackUploadLabel");
 
@@ -1067,9 +1060,6 @@ async function tryLoadCachedGeneratedImage(charName) {
     }
     if (el.feedbackDescription) {
       el.feedbackDescription.placeholder = t("feedbackDescriptionPlaceholder");
-    }
-    if (el.feedbackContact) {
-      el.feedbackContact.placeholder = t("feedbackContactPlaceholder");
     }
 
     if (el.librarySearchInput) {
@@ -2082,17 +2072,6 @@ async function tryLoadCachedGeneratedImage(charName) {
     el.feedbackStatus.dataset.mode = mode;
   }
 
-  function updateFeedbackContactVisibility() {
-    const selectedType = document.querySelector('input[name="feedbackType"]:checked');
-    const showContact = (selectedType?.value || "") === "other";
-    if (el.feedbackContactRow) {
-      el.feedbackContactRow.classList.toggle("is-hidden", !showContact);
-    }
-    if (!showContact && el.feedbackContact) {
-      el.feedbackContact.value = "";
-    }
-  }
-
   function updateScreenshotLabel() {
     if (!el.feedbackScreenshotLabel) return;
     if (state.feedbackFile) {
@@ -2176,8 +2155,7 @@ async function tryLoadCachedGeneratedImage(charName) {
     try {
       const selectedType = document.querySelector('input[name="feedbackType"]:checked');
       const feedbackCategory = selectedType ? selectedType.value : "feedback";
-      const includeContact = feedbackCategory === "other";
-      const contactValue = includeContact ? String(el.feedbackContact?.value || "").trim() : "";
+      const contactValue = "";
 
       if (state.feedbackFile) {
         const formData = new FormData();
@@ -2207,7 +2185,6 @@ async function tryLoadCachedGeneratedImage(charName) {
       setFeedbackStatus(t("feedbackThanks"), "success");
       el.feedbackForm.reset();
       clearFeedbackScreenshot();
-      updateFeedbackContactVisibility();
     } catch (err) {
       console.error("Feedback submit failed", err?.message || err);
       setFeedbackStatus(t("feedbackError"), "error");
@@ -2223,7 +2200,6 @@ async function tryLoadCachedGeneratedImage(charName) {
         const input = label.querySelector("input");
         label.classList.toggle("is-checked", !!input?.checked);
       });
-      updateFeedbackContactVisibility();
     };
 
     el.feedbackForm.addEventListener("submit", handleFeedbackSubmit);
