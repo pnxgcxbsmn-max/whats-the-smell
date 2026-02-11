@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v15-20260207-tabsfix";
+const CACHE_VERSION = "v16-20260211-category-touch-fix";
 const CACHE_NAME = `wts-cache-${CACHE_VERSION}`;
 const SHELL_URL = "/index.html";
 const CRITICAL_ASSETS = [

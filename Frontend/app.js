@@ -54,11 +54,14 @@
     categoryLabel: document.getElementById("categoryLabel"),
     categoryDD: document.getElementById("categoryDD"),
     categoryBtn: document.getElementById("categoryBtn"),
+    categoryDrawer: document.getElementById("categoryDrawer"),
     categoryValue: document.getElementById("categoryValue"),
     categoryArrowLeft: document.getElementById("categoryArrowLeft"),
     categoryArrowRight: document.getElementById("categoryArrowRight"),
     categoryRail: document.getElementById("categoryRail"),
-    categoryChips: document.getElementById("categoryChips"),
+    categoryPrev: document.getElementById("categoryPrev"),
+    categoryActive: document.getElementById("categoryActive"),
+    categoryNext: document.getElementById("categoryNext"),
 
     smellBtn: document.getElementById("smellBtn"),
     clearBtn: document.getElementById("clearBtn"),
@@ -135,12 +138,28 @@
   };
 
   // ===== Guard: if DOM missing, stop gracefully =====
-  const required = ["langSelect", "langSwitch", "characterInput", "categoryBtn", "smellBtn", "clearBtn", "outputBox"];
+  const required = ["characterInput", "categoryBtn", "smellBtn", "clearBtn", "outputBox"];
   for (const k of required) {
     if (!el[k]) {
       console.error("[WTS] Missing DOM element:", k);
-      return;
     }
+  }
+
+  if (!el.langSelect) {
+    const select = document.createElement("select");
+    select.id = "langSelect";
+    select.innerHTML = "<option value=\"en\">English</option><option value=\"es\">Español</option>";
+    select.style.display = "none";
+    document.body.appendChild(select);
+    el.langSelect = select;
+  }
+
+  if (!el.langSwitch) {
+    const toggle = document.createElement("div");
+    toggle.id = "langSwitch";
+    toggle.style.display = "none";
+    document.body.appendChild(toggle);
+    el.langSwitch = toggle;
   }
 
   // ===== TRANSLATION ENGINE (Using free API) =====
@@ -441,6 +460,12 @@
     drawerOpen: false,
     feedbackFile: null,
     feedbackPreviewUrl: "",
+    categoryAnimating: false,
+    carouselSlots: null,
+    lastCategoryPressAt: 0,
+    ignoreDrawerClicksUntil: 0,
+    lastCategoryCloseAt: 0,
+    categoryDropdownBound: false,
   };
 
   // ===== Helpers =====
@@ -964,6 +989,7 @@ async function tryLoadCachedGeneratedImage(charName) {
   }
 
   function applyLangSwitchUI() {
+    if (!el.langSwitch || !el.langSelect) return;
     const isEn = curLang() === "en";
     el.langSwitch.classList.toggle("is-en", isEn);
     el.langSwitch.classList.toggle("is-es", !isEn);
@@ -1063,16 +1089,18 @@ async function tryLoadCachedGeneratedImage(charName) {
   // ===== Locks =====
   function applyLocks() {
     // Bloquea idioma solo mientras genera (no cuando ya hay resultado)
-    el.langSelect.disabled = state.busy;
-    el.langSwitch.classList.toggle("is-disabled", state.busy);
+    if (el.langSelect) el.langSelect.disabled = state.busy;
+    if (el.langSwitch) el.langSwitch.classList.toggle("is-disabled", state.busy);
 
     // Inputs should be locked when busy OR when a result is present (until New trail)
     const shouldLockInputs = state.busy || state.hasResult;
     
-    el.smellBtn.disabled = shouldLockInputs || !el.characterInput.value.trim();
-    el.characterInput.disabled = shouldLockInputs;
-    el.categoryBtn.disabled = shouldLockInputs;
-    el.clearBtn.disabled = state.busy;
+    if (el.smellBtn && el.characterInput) {
+      el.smellBtn.disabled = shouldLockInputs || !el.characterInput.value.trim();
+    }
+    if (el.characterInput) el.characterInput.disabled = shouldLockInputs;
+    if (el.categoryBtn) el.categoryBtn.disabled = state.busy;
+    if (el.clearBtn) el.clearBtn.disabled = state.busy;
 
     if (state.busy) closeCategoryPanel();
   }
@@ -1102,80 +1130,230 @@ async function tryLoadCachedGeneratedImage(charName) {
   // ===== Dropdown =====
   function setCategoryValue(id) {
     const next = CATEGORIES.some((x) => x.id === id) ? id : "any";
-    state.selectedCategory = next;
-    const label = categoryLabelFor(next);
-    if (el.categoryValue) el.categoryValue.textContent = label;
-    state.focusIndex = Math.max(0, CATEGORIES.findIndex((x) => x.id === next));
-    syncCategoryChips();
+    const idx = Math.max(0, CATEGORIES.findIndex((x) => x.id === next));
+    setActiveCategoryIndex(idx);
   }
 
-  function renderCategoryOptions() {
-    if (!el.categoryChips) return;
-    el.categoryChips.innerHTML = "";
-    CATEGORIES.forEach((cat) => {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "ddChip";
-      btn.dataset.value = cat.id;
-      btn.setAttribute("role", "option");
-      btn.textContent = categoryLabelFor(cat.id);
-      el.categoryChips.appendChild(btn);
-    });
-    syncCategoryChips();
+  function ensureCarouselSlots() {
+    if (!el.categoryPrev || !el.categoryActive || !el.categoryNext) return null;
+    if (!state.carouselSlots) {
+      state.carouselSlots = {
+        left: el.categoryPrev,
+        center: el.categoryActive,
+        right: el.categoryNext,
+      };
+    }
+    return state.carouselSlots;
   }
 
-  function syncCategoryChips() {
-    if (!el.categoryChips) return;
-    const chips = Array.from(el.categoryChips.querySelectorAll(".ddChip"));
-    chips.forEach((chip) => {
-      const isSelected = chip.dataset.value === state.selectedCategory;
-      chip.classList.toggle("is-selected", isSelected);
-      chip.setAttribute("aria-selected", isSelected ? "true" : "false");
-      if (isSelected) {
-        chip.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
-      }
-    });
+  function setCarouselItem(elm, id) {
+    if (!elm) return;
+    elm.textContent = categoryLabelFor(id);
+    elm.dataset.value = id;
+  }
+
+  function setCarouselPosition(elm, pos) {
+    if (!elm) return;
+    elm.classList.remove("left", "center", "right");
+    elm.classList.add(pos);
+    const isCenter = pos === "center";
+    elm.setAttribute("aria-hidden", isCenter ? "false" : "true");
+    elm.setAttribute("aria-selected", isCenter ? "true" : "false");
+    elm.setAttribute("tabindex", isCenter ? "0" : "-1");
+  }
+
+  function updateCategoryCarousel() {
+    const slots = ensureCarouselSlots();
+    if (!slots) return;
+    const len = CATEGORIES.length;
+    const activeIndex = ((state.focusIndex % len) + len) % len;
+    const prevIndex = (activeIndex - 1 + len) % len;
+    const nextIndex = (activeIndex + 1) % len;
+
+    setCarouselPosition(slots.left, "left");
+    setCarouselPosition(slots.center, "center");
+    setCarouselPosition(slots.right, "right");
+
+    setCarouselItem(slots.left, CATEGORIES[prevIndex].id);
+    setCarouselItem(slots.center, CATEGORIES[activeIndex].id);
+    setCarouselItem(slots.right, CATEGORIES[nextIndex].id);
+  }
+
+  function setActiveCategoryIndex(nextIndex) {
+    const len = CATEGORIES.length;
+    state.focusIndex = ((nextIndex % len) + len) % len;
+    const nextId = CATEGORIES[state.focusIndex].id;
+    state.selectedCategory = nextId;
+    if (el.categoryValue) el.categoryValue.textContent = categoryLabelFor(nextId);
+    updateCategoryCarousel();
   }
 
   function moveCategory(delta) {
+    if (state.categoryAnimating) return;
     const len = CATEGORIES.length;
-    state.focusIndex = (state.focusIndex + delta + len) % len;
-    const nextId = CATEGORIES[state.focusIndex].id;
-    setCategoryValue(nextId);
+    if (!len) return;
+    const slots = ensureCarouselSlots();
+    if (!slots) return;
+
+    const nextIndex = (state.focusIndex + delta + len) % len;
+    const prevIndex = (nextIndex - 1 + len) % len;
+    const nextNextIndex = (nextIndex + 1) % len;
+
+    state.categoryAnimating = true;
+
+    const newSlots = delta > 0
+      ? { left: slots.center, center: slots.right, right: slots.left }
+      : { left: slots.right, center: slots.left, right: slots.center };
+
+    state.carouselSlots = newSlots;
+
+    setCarouselPosition(newSlots.left, "left");
+    setCarouselPosition(newSlots.center, "center");
+    setCarouselPosition(newSlots.right, "right");
+
+    state.focusIndex = nextIndex;
+    state.selectedCategory = CATEGORIES[nextIndex].id;
+    if (el.categoryValue) el.categoryValue.textContent = categoryLabelFor(state.selectedCategory);
+
+    setCarouselItem(newSlots.center, state.selectedCategory);
+
+    window.setTimeout(() => {
+      setCarouselItem(newSlots.left, CATEGORIES[prevIndex].id);
+      setCarouselItem(newSlots.right, CATEGORIES[nextNextIndex].id);
+      state.categoryAnimating = false;
+    }, 140);
   }
 
   function openCategoryPanel() {
     if (!el.categoryDD || !el.categoryBtn) return;
     state.ddOpen = true;
+    state.ignoreDrawerClicksUntil = Date.now() + 250;
     el.categoryDD.classList.add("open");
+    el.categoryBtn.classList.add("active");
     el.categoryBtn.setAttribute("aria-expanded", "true");
+    updateCategoryCarousel();
   }
 
   function closeCategoryPanel() {
     if (!el.categoryDD || !el.categoryBtn) return;
     state.ddOpen = false;
+    state.lastCategoryCloseAt = Date.now();
     el.categoryDD.classList.remove("open");
+    el.categoryBtn.classList.remove("active");
     el.categoryBtn.setAttribute("aria-expanded", "false");
   }
 
+  function isCategoryPanelOpen() {
+    if (!el.categoryDD || !el.categoryBtn) return !!state.ddOpen;
+    return el.categoryDD.classList.contains("open")
+      || el.categoryBtn.classList.contains("active")
+      || state.ddOpen;
+  }
+
+  function syncCategoryPanelState() {
+    const visualOpen = isCategoryPanelOpen();
+    state.ddOpen = visualOpen;
+    if (el.categoryBtn) {
+      el.categoryBtn.setAttribute("aria-expanded", visualOpen ? "true" : "false");
+    }
+  }
+
+  function getEventClientPoint(e) {
+    const touch = e?.touches?.[0] || e?.changedTouches?.[0];
+    if (touch) return { x: touch.clientX, y: touch.clientY };
+    return {
+      x: Number.isFinite(e?.clientX) ? e.clientX : 0,
+      y: Number.isFinite(e?.clientY) ? e.clientY : 0,
+    };
+  }
+
   function bindCategoryDropdown() {
-    renderCategoryOptions();
+    if (state.categoryDropdownBound) return;
+    state.categoryDropdownBound = true;
+    updateCategoryCarousel();
 
     if (el.categoryBtn) {
-      el.categoryBtn.addEventListener("click", (e) => {
+      const handleCategoryPress = (e) => {
         e.preventDefault();
         e.stopPropagation();
-        if (state.ddOpen) closeCategoryPanel();
-        else openCategoryPanel();
+        syncCategoryPanelState();
+
+        if (!isCategoryPanelOpen()) {
+          openCategoryPanel();
+          return;
+        }
+        closeCategoryPanel();
+      };
+
+      el.categoryBtn.addEventListener("pointerdown", (e) => {
+        state.lastCategoryPressAt = Date.now();
+        handleCategoryPress(e);
+      }, { passive: false });
+
+      el.categoryBtn.addEventListener("click", (e) => {
+        const sincePointer = Date.now() - state.lastCategoryPressAt;
+        if (sincePointer < 350) {
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+        handleCategoryPress(e);
+      });
+
+      el.categoryBtn.addEventListener("keydown", (e) => {
+        if (e.key !== "Enter" && e.key !== " ") return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (!state.ddOpen) {
+          openCategoryPanel();
+          return;
+        }
+        closeCategoryPanel();
       });
     }
 
-    if (el.categoryChips) {
-      el.categoryChips.addEventListener("click", (e) => {
-        const target = e.target.closest(".ddChip");
-        if (!target) return;
-        const value = target.dataset.value || "any";
-        setCategoryValue(value);
+    if (el.categoryDD) {
+      const handleCategoryDDCapture = (e) => {
+        syncCategoryPanelState();
+        if (!isCategoryPanelOpen()) {
+          e.preventDefault();
+          e.stopPropagation();
+          openCategoryPanel();
+          return;
+        }
+        if (!el.categoryDrawer || !el.categoryBtn) return;
+        if (Date.now() < state.ignoreDrawerClicksUntil) return;
+        if (e.target.closest(".ddArrowLeft") || e.target.closest(".ddArrowRight")) return;
+
+        const rect = el.categoryDD.getBoundingClientRect();
+        const point = getEventClientPoint(e);
+        const x = point.x - rect.left;
+        const edgeZone = Math.max(42, rect.width * 0.18);
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (x <= edgeZone) {
+          moveCategory(-1);
+          return;
+        }
+        if (x >= rect.width - edgeZone) {
+          moveCategory(1);
+          return;
+        }
+        closeCategoryPanel();
+      };
+
+      // Capture phase ensures center taps are handled even if inner layers conflict.
+      el.categoryDD.addEventListener("pointerdown", handleCategoryDDCapture, { passive: false, capture: true });
+
+      el.categoryDD.addEventListener("click", (e) => {
+        syncCategoryPanelState();
+        if (isCategoryPanelOpen()) return;
+        if (e.target.closest("#categoryBtn")) return;
+        if (Date.now() - state.lastCategoryCloseAt < 180) return;
+        if (e.target.closest(".ddArrowLeft") || e.target.closest(".ddArrowRight")) return;
+        openCategoryPanel();
       });
     }
 
@@ -1193,16 +1371,142 @@ async function tryLoadCachedGeneratedImage(charName) {
       });
     }
 
+    if (el.categoryDrawer) {
+      const handleDrawerZonePress = (e) => {
+        const rect = el.categoryDrawer.getBoundingClientRect();
+        const point = getEventClientPoint(e);
+        const x = point.x - rect.left;
+        const edgeZone = Math.max(52, rect.width * 0.22);
+        if (x <= edgeZone) {
+          moveCategory(-1);
+          return true;
+        }
+        if (x >= rect.width - edgeZone) {
+          moveCategory(1);
+          return true;
+        }
+        closeCategoryPanel();
+        return true;
+      };
+
+      const handleDrawerItemPress = (e) => {
+        syncCategoryPanelState();
+        if (!isCategoryPanelOpen()) return;
+        if (Date.now() < state.ignoreDrawerClicksUntil) return;
+        if (e.target.closest(".ddArrowLeft") || e.target.closest(".ddArrowRight")) return;
+
+        const item = e.target.closest(".carousel-item");
+        if (!item) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (item.classList.contains("left")) {
+          moveCategory(-1);
+          return;
+        }
+        if (item.classList.contains("right")) {
+          moveCategory(1);
+          return;
+        }
+        if (item.classList.contains("center")) {
+          closeCategoryPanel();
+          return;
+        }
+
+        handleDrawerZonePress(e);
+      };
+
+      el.categoryDrawer.addEventListener("pointerdown", handleDrawerItemPress, { passive: false });
+
+      el.categoryDrawer.addEventListener("click", (e) => {
+        e.stopPropagation();
+        syncCategoryPanelState();
+        if (!isCategoryPanelOpen()) return;
+        if (Date.now() < state.ignoreDrawerClicksUntil) return;
+        if (e.target.closest(".ddArrowLeft") || e.target.closest(".ddArrowRight")) return;
+
+        const item = e.target.closest(".carousel-item");
+        if (!item) {
+          handleDrawerZonePress(e);
+          return;
+        }
+        if (item.classList.contains("left")) {
+          moveCategory(-1);
+          return;
+        }
+        if (item.classList.contains("right")) {
+          moveCategory(1);
+          return;
+        }
+        if (item.classList.contains("center")) {
+          closeCategoryPanel();
+          return;
+        }
+        handleDrawerZonePress(e);
+      });
+
+      el.categoryDrawer.addEventListener("keydown", (e) => {
+        syncCategoryPanelState();
+        if (!isCategoryPanelOpen()) return;
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          closeCategoryPanel();
+        }
+      });
+    }
+
+    if (el.categoryRail) {
+      el.categoryRail.addEventListener("wheel", (e) => {
+        syncCategoryPanelState();
+        if (!isCategoryPanelOpen()) return;
+        const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+        if (Math.abs(delta) < 2) return;
+        e.preventDefault();
+        moveCategory(delta > 0 ? 1 : -1);
+      }, { passive: false });
+
+      let touchStartX = 0;
+      let touchActive = false;
+      el.categoryRail.addEventListener("touchstart", (e) => {
+        syncCategoryPanelState();
+        if (!isCategoryPanelOpen()) return;
+        const touch = e.touches[0];
+        if (!touch) return;
+        touchActive = true;
+        touchStartX = touch.clientX;
+      }, { passive: true });
+
+      el.categoryRail.addEventListener("touchend", (e) => {
+        syncCategoryPanelState();
+        if (!isCategoryPanelOpen() || !touchActive) return;
+        const touch = e.changedTouches[0];
+        if (!touch) return;
+        const deltaX = touch.clientX - touchStartX;
+        if (Math.abs(deltaX) > 24) {
+          moveCategory(deltaX < 0 ? 1 : -1);
+        }
+        touchActive = false;
+      }, { passive: true });
+    }
+
     document.addEventListener("click", (e) => {
-      if (!state.ddOpen) return;
+      syncCategoryPanelState();
+      if (!isCategoryPanelOpen()) return;
       if (el.categoryDD && !el.categoryDD.contains(e.target)) {
         closeCategoryPanel();
       }
     });
 
     document.addEventListener("keydown", (e) => {
-      if (!state.ddOpen) return;
+      syncCategoryPanelState();
+      if (!isCategoryPanelOpen()) return;
       if (e.key === "Escape") {
+        e.preventDefault();
+        closeCategoryPanel();
+        return;
+      }
+      if (e.key === "Enter" || e.key === " ") {
         e.preventDefault();
         closeCategoryPanel();
         return;
@@ -1217,9 +1521,7 @@ async function tryLoadCachedGeneratedImage(charName) {
       }
     });
   }
-
-  
-  // ===== Canon aroma curiosities (curated; no inventions) =====
+// ===== Canon aroma curiosities (curated; no inventions) =====
   const CANON_CURIOSITY_MAP = {
     // Naruto: canon food smell theme (Ichiraku Ramen obsession)
     "naruto uzumaki": {
@@ -2835,7 +3137,7 @@ async function tryLoadCachedGeneratedImage(charName) {
     triggerLangOverlay();
     setLogoForLang();
     applyLangSwitchUI();
-    renderCategoryOptions();
+    setCategoryValue(state.selectedCategory);
     computeCategoryButtonWidth();
     applyStaticText();
     setCuriosityForCharacter(el.characterInput.value);
@@ -2884,6 +3186,7 @@ async function tryLoadCachedGeneratedImage(charName) {
   }
 
   function bindLangSwitch() {
+    if (!el.langSwitch || !el.langSelect) return;
     el.langSwitch.addEventListener("click", (e) => {
       if (state.busy) return;
 
