@@ -41,6 +41,7 @@
   };
 
   let currentAccessGateLang = localStorage.getItem("accessGateLang") || "en";
+  const MOBILE_BOOT_INTRO_KEY = "wts_mobile_boot_intro_seen";
 
   // Reset token when gate version changes
   const lastVersion = localStorage.getItem(ACCESS_GATE_VERSION_KEY);
@@ -153,11 +154,106 @@
       .welcome-overlay{position:absolute;inset:0;background:rgba(20,20,40,.95);border-radius:24px;display:flex;align-items:center;justify-content:center;z-index:100;}
       .welcome-message{font-size:56px;font-weight:700;color:#f0f0f0;text-transform:uppercase;letter-spacing:3px;text-align:center;text-shadow:0 0 30px rgba(120,210,255,.5);}
       @media (max-width:480px){.access-gate-box{padding:32px 24px 70px;border-radius:16px}.access-gate-title{font-size:24px}.access-gate-input-wrapper{flex-direction:column}.access-gate-submit{width:100%}.access-gate-icon{width:60px;height:60px}.welcome-message{font-size:36px}}
+
+      .mobile-boot-intro{
+        position:fixed;inset:0;z-index:20000;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;
+        opacity:0;pointer-events:none;
+      }
+      .mobile-boot-intro.is-visible{
+        opacity:1;pointer-events:auto;
+      }
+      .mobile-boot-intro.is-hiding{
+        animation:wts-mobile-intro-out .5s ease forwards;
+      }
+      .mobile-boot-intro-logo{
+        width:min(72vw,320px);height:auto;object-fit:contain;filter:drop-shadow(0 6px 22px rgba(0,0,0,.12));
+        animation:wts-mobile-intro-logo 1.15s cubic-bezier(.2,.9,.2,1) forwards;
+      }
+      .mobile-boot-intro-footer{
+        position:absolute;bottom:22px;left:50%;transform:translateX(-50%);
+        display:flex;align-items:center;gap:8px;color:rgba(0,0,0,.52);
+        font-family:'Courier New','Courier',monospace;font-size:10px;font-weight:600;letter-spacing:.4px;
+      }
+      .mobile-boot-intro-business{
+        width:22px;height:22px;object-fit:contain;opacity:.72;
+      }
+      @keyframes wts-mobile-intro-logo{
+        0%{ transform:scale(.86); opacity:0; filter:blur(1.2px); }
+        30%{ transform:scale(1.03); opacity:1; filter:blur(0); }
+        65%{ transform:scale(1); opacity:1; }
+        100%{ transform:scale(1); opacity:1; }
+      }
+      @keyframes wts-mobile-intro-out{
+        from{ opacity:1; filter:blur(0); }
+        to{ opacity:0; filter:blur(2px); }
+      }
     `;
     document.head.appendChild(style);
   }
 
-  function showMainSite() {
+  function isMobileViewport() {
+    return window.matchMedia("(max-width: 767px)").matches;
+  }
+
+  function playMobileBootTone() {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const now = ctx.currentTime;
+
+      const mkOsc = (freq, start, dur, gain = 0.05) => {
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.type = "square";
+        osc.frequency.setValueAtTime(freq, start);
+        g.gain.setValueAtTime(0.0001, start);
+        g.gain.exponentialRampToValueAtTime(gain, start + 0.015);
+        g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+        osc.connect(g).connect(ctx.destination);
+        osc.start(start);
+        osc.stop(start + dur);
+      };
+
+      // Minimal "boot" feel: two quick tones + one soft tail.
+      mkOsc(659.25, now + 0.02, 0.11, 0.05);
+      mkOsc(987.77, now + 0.16, 0.12, 0.045);
+      mkOsc(783.99, now + 0.31, 0.20, 0.03);
+
+      setTimeout(() => {
+        try { ctx.close(); } catch {}
+      }, 900);
+    } catch {}
+  }
+
+  async function showMobileBootIntro() {
+    if (!isMobileViewport()) return;
+
+    // Show once per browser session to avoid annoyance while navigating.
+    // Remove this check if you want it on every page load.
+    if (sessionStorage.getItem(MOBILE_BOOT_INTRO_KEY) === "1") return;
+    sessionStorage.setItem(MOBILE_BOOT_INTRO_KEY, "1");
+
+    const overlay = document.createElement("div");
+    overlay.className = "mobile-boot-intro";
+    overlay.innerHTML = `
+      <img class="mobile-boot-intro-logo" src="assets/brand/logo-en.png" alt="What's the Smell?" />
+      <div class="mobile-boot-intro-footer">
+        <span>ReyMono Studio</span>
+        <img class="mobile-boot-intro-business" src="assets/brand/businesslogo.png" alt="ReyMono Studio" />
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add("is-visible"));
+    playMobileBootTone();
+
+    await new Promise((resolve) => setTimeout(resolve, 1250));
+    overlay.classList.add("is-hiding");
+    await new Promise((resolve) => setTimeout(resolve, 520));
+    overlay.remove();
+  }
+
+  async function showMainSite() {
     try {
       const container = document.getElementById("accessGateContainer");
       if (container) {
@@ -171,6 +267,7 @@
       if (typeof window.initializeApp === "function") {
         window.initializeApp();
       }
+      await showMobileBootIntro();
     } catch (err) {
       console.error("[ACCESS-GATE] showMainSite error:", err);
     }

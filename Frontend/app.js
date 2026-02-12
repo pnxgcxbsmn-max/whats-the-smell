@@ -924,7 +924,7 @@ async function tryLoadCachedGeneratedImage(charName) {
   function updateDetailActionsVisibility() {
     const hasResult = !!state.hasResult && !!state.detail;
     const showFavorite = hasResult;
-    const showDownload = hasResult && isDesktop();
+    const showDownload = false;
     const showCapture = false;
     const showBack = false;
     const showClose = false;
@@ -1749,35 +1749,65 @@ async function tryLoadCachedGeneratedImage(charName) {
     return {
       supported,
       async getAll() {
-        if (!supported) return lsReadAll();
-        const result = await withStore("readonly", (store) => store.getAll());
-        return Array.isArray(result) ? result : [];
+        if (!supported) return lsReadAll().map(normalizeLibraryEntry);
+        try {
+          const result = await withStore("readonly", (store) => store.getAll());
+          const list = Array.isArray(result) ? result.map(normalizeLibraryEntry) : [];
+          if (list.length) {
+            // Keep a localStorage mirror as extra resilience on mobile browsers.
+            lsWriteAll(list);
+            return list;
+          }
+
+          // IndexedDB empty: restore from localStorage mirror if available.
+          const backup = lsReadAll().map(normalizeLibraryEntry);
+          if (backup.length) {
+            await Promise.all(
+              backup.map((item) => withStore("readwrite", (store) => store.put(item)).catch(() => null))
+            );
+            return backup;
+          }
+          return [];
+        } catch (err) {
+          console.warn("Library getAll fallback to localStorage:", err?.message || err);
+          return lsReadAll().map(normalizeLibraryEntry);
+        }
       },
       async put(entry) {
         const normalized = normalizeLibraryEntry(entry);
-        if (!supported) {
-          const all = lsReadAll();
-          const idx = all.findIndex((e) => e.id === normalized.id);
-          if (idx >= 0) all[idx] = normalized;
-          else all.push(normalized);
-          lsWriteAll(all);
-          return normalized;
+        const all = lsReadAll().map(normalizeLibraryEntry);
+        const idx = all.findIndex((e) => e.id === normalized.id);
+        if (idx >= 0) all[idx] = normalized;
+        else all.push(normalized);
+        lsWriteAll(all);
+
+        if (!supported) return normalized;
+        try {
+          await withStore("readwrite", (store) => store.put(normalized));
+        } catch (err) {
+          console.warn("Library put failed in IndexedDB (LS mirror kept):", err?.message || err);
         }
-        return withStore("readwrite", (store) => store.put(normalized));
+        return normalized;
       },
       async delete(id) {
-        if (!supported) {
-          const all = lsReadAll().filter((e) => e.id !== id);
-          lsWriteAll(all);
-          return;
+        const all = lsReadAll().filter((e) => e.id !== id);
+        lsWriteAll(all);
+        if (!supported) return;
+        try {
+          await withStore("readwrite", (store) => store.delete(id));
+        } catch (err) {
+          console.warn("Library delete failed in IndexedDB (LS mirror kept):", err?.message || err);
         }
-        return withStore("readwrite", (store) => store.delete(id));
       },
       async get(id) {
-        if (!supported) {
-          return lsReadAll().find((e) => e.id === id) || null;
+        if (!supported) return lsReadAll().find((e) => e.id === id) || null;
+        try {
+          const fromDb = await withStore("readonly", (store) => store.get(id));
+          if (fromDb) return normalizeLibraryEntry(fromDb);
+        } catch (err) {
+          console.warn("Library get fallback to localStorage:", err?.message || err);
         }
-        return withStore("readonly", (store) => store.get(id));
+        return lsReadAll().find((e) => e.id === id) || null;
       }
     };
   })();
@@ -2081,9 +2111,9 @@ async function tryLoadCachedGeneratedImage(charName) {
       el.favoriteToggle.classList.remove("is-visible", "is-favorite");
       el.favoriteToggle.setAttribute("aria-pressed", "false");
       el.favoriteToggle.disabled = true;
-      if (el.favoriteToggleLabel) {
-        el.favoriteToggleLabel.textContent = t("favoriteAdd");
-      }
+      el.favoriteToggle.setAttribute("aria-label", t("favoriteAdd"));
+      el.favoriteToggle.setAttribute("title", t("favoriteAdd"));
+      if (el.favoriteToggleLabel) el.favoriteToggleLabel.textContent = t("favoriteAdd");
       return;
     }
 
@@ -2093,9 +2123,10 @@ async function tryLoadCachedGeneratedImage(charName) {
     el.favoriteToggle.classList.add("is-visible");
     el.favoriteToggle.classList.toggle("is-favorite", !!isFavorite);
     el.favoriteToggle.setAttribute("aria-pressed", isFavorite ? "true" : "false");
-    if (el.favoriteToggleLabel) {
-      el.favoriteToggleLabel.textContent = isFavorite ? t("favoriteRemove") : t("favoriteAdd");
-    }
+    const actionLabel = isFavorite ? t("favoriteRemove") : t("favoriteAdd");
+    el.favoriteToggle.setAttribute("aria-label", actionLabel);
+    el.favoriteToggle.setAttribute("title", actionLabel);
+    if (el.favoriteToggleLabel) el.favoriteToggleLabel.textContent = actionLabel;
   }
 
   async function toggleFavoriteFromDetail() {
@@ -2298,9 +2329,10 @@ async function tryLoadCachedGeneratedImage(charName) {
       ? (entry?.textEs || entry?.textEn || entry?.text || "")
       : (entry?.textEn || entry?.textEs || entry?.text || "");
     const summary = buildCondensedMainOutput(textSource || entry?.summary || "");
-    const notes = (Array.isArray(entry?.notes) && entry.notes.length)
-      ? entry.notes.slice(0, 4)
-      : parseNotesFromResult(textSource || "").slice(0, 4);
+    const notesFromText = parseNotesFromResult(textSource || "").slice(0, 4);
+    const notes = notesFromText.length
+      ? notesFromText
+      : ((Array.isArray(entry?.notes) && entry.notes.length) ? entry.notes.slice(0, 4) : []);
     const name = String(entry?.characterName || entry?.name || entry?.officialName || "Unknown").trim() || "Unknown";
     const category = categoryLabelFor(entry?.category || state?.selectedCategory || "any");
     const universe = String(entry?.universe || "").trim();
@@ -2428,12 +2460,11 @@ async function tryLoadCachedGeneratedImage(charName) {
     });
 
     // Footer
-    const ts = formatTimestamp(entry?.createdAt || entry?.timestamp || Date.now());
     ctx.font = "500 20px Sora, Segoe UI, sans-serif";
     ctx.fillStyle = "rgba(222,232,255,.82)";
-    ctx.fillText(`Generated with What's the Smell? App`, 120, height - 80);
-    ctx.fillStyle = "rgba(200,212,245,.72)";
-    ctx.fillText(ts, width - 360, height - 80);
+    ctx.textAlign = "center";
+    ctx.fillText(`Generated with What's the Smell? App`, width / 2, height - 80);
+    ctx.textAlign = "start";
 
     return canvas;
   }
@@ -3604,7 +3635,7 @@ async function tryLoadCachedGeneratedImage(charName) {
       const liveEntry = buildEntryFromState();
       if (liveEntry) {
         setDetailFromEntry(liveEntry, "live");
-        persistEntry(liveEntry);
+        await persistEntry(liveEntry);
         markLibraryBadge();
       }
 

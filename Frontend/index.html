@@ -816,13 +816,19 @@
     /* Right */
     .visualRow{
       display:grid;
-      grid-template-columns:1fr 1fr;
+      grid-template-columns:minmax(220px, .9fr) minmax(300px, 1.25fr);
       gap:16px;
       padding:16px;
       border-radius:18px;
       background: rgba(255,255,255,.10);
       border:1px solid var(--line);
       align-items: flex-start;
+    }
+
+    @media(min-width:1200px){
+      .app-grid{
+        grid-template-columns: 1.2fr 1.15fr;
+      }
     }
 
     .imgFrame{
@@ -1045,7 +1051,7 @@
 
     .sheetRow{
       display: grid;
-      grid-template-columns: 120px 1fr;
+      grid-template-columns: 108px 1fr;
       gap: 8px;
       align-items: flex-start;
       font-size: 12px;
@@ -1062,7 +1068,8 @@
     .sheetValue{
       color: rgba(255,255,255,.95);
       font-weight: 500;
-      word-break: break-word;
+      word-break: normal;
+      overflow-wrap: anywhere;
     }
 
     .charFact{
@@ -2279,13 +2286,33 @@ color: rgba(245,250,255,.96) !important;
     min-height: 42px;
   }
 
-  .detail-actions{
-    display:flex;
-    gap:10px;
-    flex-wrap:wrap;
-    margin-top:12px;
-    align-items:center;
-  }
+    .detail-actions{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      margin-top:12px;
+      align-items:center;
+      justify-content:flex-end;
+    }
+
+    .favorite-toggle.icon-only{
+      width:38px;
+      height:38px;
+      min-width:38px;
+      padding:0;
+      border-radius:999px;
+      justify-content:center;
+      margin-left:auto;
+    }
+
+    .favorite-toggle.icon-only .favorite-toggle-icon{
+      font-size:18px;
+      line-height:1;
+    }
+
+    .favorite-toggle.icon-only .favorite-toggle-text{
+      display:none;
+    }
 
   .library-list,
   .favorites-list{
@@ -2895,11 +2922,10 @@ color: rgba(245,250,255,.96) !important;
       </div>
 
       <div class="detail-actions" id="detailActions">
-        <button type="button" class="favorite-toggle pill-btn primary glass-button" id="favoriteToggle">
+        <button type="button" class="favorite-toggle icon-only pill-btn primary glass-button" id="favoriteToggle" aria-label="Guardar favorito" title="Guardar favorito">
           <span class="favorite-toggle-icon" aria-hidden="true">♥</span>
-          <span id="favoriteToggleLabel">Guardar favorito</span>
+          <span class="favorite-toggle-text" id="favoriteToggleLabel">Guardar favorito</span>
         </button>
-        <button type="button" class="pill-btn download glass-button" id="detailDownloadBtn">Descargar</button>
         <button type="button" class="pill-btn capture glass-button" id="detailCaptureBtn">Capturar pantalla</button>
         <button type="button" class="pill-btn glass-button" id="detailBackBtn">Volver al generador</button>
       </div>
@@ -2985,7 +3011,7 @@ color: rgba(245,250,255,.96) !important;
   <!-- Gateway module: defines GATEWAY global (must load first) -->
   <script src="gateway.js?v=20260212a"></script>
   <!-- Gate UI: access-gate.js -->
-  <script src="access-gate.js?v=20260211b"></script>
+  <script src="access-gate.js?v=20260212b"></script>
   <!-- html2canvas for feedback screenshots -->
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" defer></script>
   <!-- Main app: uses GATEWAY module -->
