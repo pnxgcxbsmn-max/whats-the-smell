@@ -10,7 +10,9 @@
 
 const GATEWAY = (() => {
   // ===== VERSION (increment to force cache busting) =====
-  const VERSION = "2026-02-06-v3";
+  const VERSION = "2026-02-12-v6-local-default";
+  const RAILWAY_API = "https://whats-the-smell-production.up.railway.app";
+  const LOCAL_API = "http://localhost:5051";
   
   // ===== GATE CONFIGURATION =====
   const GATE_CONFIG = {
@@ -27,12 +29,34 @@ const GATEWAY = (() => {
     const port = window.location.port;
     const protocol = window.location.protocol;
 
-    if (hostname === "localhost") {
+    const isLocalHost =
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname === "::1";
+
+    if (isLocalHost) {
       if (port === "3000") return "DEV_LOCAL_3000";
       return "DEV_LOCAL_OTHER";
     }
 
     return "PRODUCTION";
+  }
+
+  function detectApiModePreference() {
+    const params = new URLSearchParams(window.location.search);
+    const fromQuery = String(params.get("api") || "").toLowerCase();
+    if (fromQuery === "local" || fromQuery === "railway") {
+      try {
+        localStorage.setItem("wts_api_mode", fromQuery);
+      } catch {}
+      return fromQuery;
+    }
+    try {
+      const fromStorage = String(localStorage.getItem("wts_api_mode") || "").toLowerCase();
+      if (fromStorage === "local" || fromStorage === "railway") return fromStorage;
+    } catch {}
+    if (window.WTS_USE_LOCAL_API === true) return "local";
+    return "local";
   }
 
   // ===== API BASE RESOLUTION (deterministic, no side effects) =====
@@ -42,14 +66,19 @@ const GATEWAY = (() => {
     if (forced) return forced;
 
     const env = detectEnvironment();
+    const apiMode = detectApiModePreference();
 
     switch (env) {
       case "DEV_LOCAL_3000":
-        return "http://localhost:5051";
+        {
+          const q = String(new URLSearchParams(window.location.search).get("api") || "").toLowerCase();
+          if (q === "railway") return RAILWAY_API;
+          return LOCAL_API;
+        }
       case "DEV_LOCAL_OTHER":
         return window.location.origin.replace(/\/+$/, "");
       case "PRODUCTION":
-        return "https://whats-the-smell-production.up.railway.app";
+        return RAILWAY_API;
       default:
         return window.location.origin.replace(/\/+$/, "");
     }

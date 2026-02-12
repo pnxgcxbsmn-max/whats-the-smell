@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v16-20260211-category-touch-fix";
+const CACHE_VERSION = "v18-20260211-gateway-railway-default";
 const CACHE_NAME = `wts-cache-${CACHE_VERSION}`;
 const SHELL_URL = "/index.html";
 const CRITICAL_ASSETS = [

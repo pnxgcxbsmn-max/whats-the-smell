@@ -274,6 +274,7 @@
       feedbackScreenshotInvalid: "Please choose an image file.",
       feedbackScreenshotTooLarge: "File too large (max 5MB).",
       libraryActionView: "Open",
+      libraryActionDownload: "Download",
       libraryActionFavorite: "Favorite",
       libraryActionUnfavorite: "Unfavorite",
       libraryActionDelete: "Delete",
@@ -348,6 +349,7 @@
       feedbackScreenshotInvalid: "Elige una imagen valida.",
       feedbackScreenshotTooLarge: "Archivo muy pesado (max 5MB).",
       libraryActionView: "Abrir",
+      libraryActionDownload: "Descargar",
       libraryActionFavorite: "Favorito",
       libraryActionUnfavorite: "Quitar favorito",
       libraryActionDelete: "Eliminar",
@@ -459,7 +461,9 @@
     lastCategoryPressAt: 0,
     ignoreDrawerClicksUntil: 0,
     lastCategoryCloseAt: 0,
+    lastCategoryConfirmAt: 0,
     categoryDropdownBound: false,
+    libraryHydrating: false,
   };
 
   // ===== Helpers =====
@@ -775,6 +779,7 @@ async function tryLoadCachedGeneratedImage(charName) {
       closeDetailPanel();
     } else if (state.detail) {
       openDetailPanel();
+      hydrateDetailTranslationIfNeeded();
     }
 
     if (state.drawerOpen) {
@@ -1089,7 +1094,7 @@ async function tryLoadCachedGeneratedImage(charName) {
       el.smellBtn.disabled = shouldLockInputs || !el.characterInput.value.trim();
     }
     if (el.characterInput) el.characterInput.disabled = shouldLockInputs;
-    if (el.categoryBtn) el.categoryBtn.disabled = state.busy;
+    if (el.categoryBtn) el.categoryBtn.disabled = shouldLockInputs;
     if (el.clearBtn) el.clearBtn.disabled = state.busy;
 
     if (state.busy) closeCategoryPanel();
@@ -1441,6 +1446,7 @@ async function tryLoadCachedGeneratedImage(charName) {
         if (!isCategoryPanelOpen()) return;
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
+          state.lastCategoryConfirmAt = Date.now();
           closeCategoryPanel();
         }
       });
@@ -1498,6 +1504,7 @@ async function tryLoadCachedGeneratedImage(charName) {
       }
       if (e.key === "Enter" || e.key === " ") {
         e.preventDefault();
+        state.lastCategoryConfirmAt = Date.now();
         closeCategoryPanel();
         return;
       }
@@ -1792,6 +1799,136 @@ async function tryLoadCachedGeneratedImage(charName) {
     };
   }
 
+  const CANONICAL_LIBRARY_OVERRIDES = {
+    "joel miller": {
+      category: "games",
+      imageUrl: "/generated/joel-miller.png",
+    },
+  };
+
+  const CANONICAL_NAME_ALIASES = {
+    "joel": "joel miller",
+  };
+
+  const SINGLE_PROFILE_CANONICAL = new Set([
+    "joel miller",
+  ]);
+
+  function canonicalizeLibraryName(rawName) {
+    const normalized = normalizeKey(rawName || "");
+    if (!normalized) return "";
+    if (normalized === "joel" || normalized.startsWith("joel ") || normalized.includes("joel miller")) {
+      return "joel miller";
+    }
+    return CANONICAL_NAME_ALIASES[normalized] || normalized;
+  }
+
+  function dedupeCanonicalEntriesForView(entries) {
+    const input = Array.isArray(entries) ? entries.map(normalizeLibraryEntry) : [];
+    const byKey = new Map();
+    for (const raw of input) {
+      const { entry } = applyCanonicalOverrideToEntry(raw);
+      const logicalName = canonicalizeLibraryName(entry.characterName || entry.name || entry.officialName || entry.searchName || entry.id);
+      const logicalCategory = normalizeKey(entry.category || "any");
+      const logicalKey = SINGLE_PROFILE_CANONICAL.has(logicalName)
+        ? logicalName
+        : `${logicalName}::${logicalCategory}`;
+
+      const current = byKey.get(logicalKey);
+      if (!current) {
+        byKey.set(logicalKey, entry);
+        continue;
+      }
+      const currentTs = current.createdAt || current.timestamp || 0;
+      const nextTs = entry.createdAt || entry.timestamp || 0;
+      if (nextTs >= currentTs) {
+        byKey.set(logicalKey, entry);
+      }
+    }
+    return Array.from(byKey.values());
+  }
+
+  function applyCanonicalOverrideToEntry(entry) {
+    const rawName = entry?.characterName || entry?.name || entry?.officialName || entry?.searchName || "";
+    const normalizedName = canonicalizeLibraryName(rawName);
+    const rule = CANONICAL_LIBRARY_OVERRIDES[normalizedName];
+    if (!rule) return { entry, changed: false };
+
+    const next = { ...entry };
+    let changed = false;
+    const canonicalDisplayName = "Joel Miller";
+    if (canonicalDisplayName && next.name !== canonicalDisplayName) {
+      next.name = canonicalDisplayName;
+      changed = true;
+    }
+    if (canonicalDisplayName && next.characterName !== canonicalDisplayName) {
+      next.characterName = canonicalDisplayName;
+      changed = true;
+    }
+    if (canonicalDisplayName && next.officialName !== canonicalDisplayName) {
+      next.officialName = canonicalDisplayName;
+      changed = true;
+    }
+    if (rule.category && next.category !== rule.category) {
+      next.category = rule.category;
+      changed = true;
+    }
+    if (rule.imageUrl && next.imageUrl !== rule.imageUrl) {
+      next.imageUrl = rule.imageUrl;
+      changed = true;
+    }
+    if (changed) {
+      next.key = buildLibraryKey(next.name || next.characterName || next.officialName || next.searchName || next.id, next.category || "any");
+    }
+    return { entry: next, changed };
+  }
+
+  async function reconcileCanonicalLibraryEntries(entries) {
+    const list = Array.isArray(entries) ? entries.map(normalizeLibraryEntry) : [];
+    const dedup = new Map();
+    const toDeleteIds = [];
+    let changed = false;
+
+    for (const raw of list) {
+      const { entry, changed: entryChanged } = applyCanonicalOverrideToEntry(raw);
+      if (entryChanged) changed = true;
+
+      const logicalName = canonicalizeLibraryName(entry.characterName || entry.name || entry.officialName || entry.searchName || entry.id);
+      const logicalCategory = normalizeKey(entry.category || "any");
+      const logicalKey = SINGLE_PROFILE_CANONICAL.has(logicalName)
+        ? logicalName
+        : `${logicalName}::${logicalCategory}`;
+
+      const current = dedup.get(logicalKey);
+      if (!current) {
+        dedup.set(logicalKey, entry);
+        continue;
+      }
+
+      const currentTs = current.createdAt || current.timestamp || 0;
+      const nextTs = entry.createdAt || entry.timestamp || 0;
+      if (nextTs >= currentTs) {
+        toDeleteIds.push(current.id);
+        dedup.set(logicalKey, entry);
+      } else {
+        toDeleteIds.push(entry.id);
+      }
+      changed = true;
+    }
+
+    const reconciled = Array.from(dedup.values());
+    if (changed) {
+      for (const id of toDeleteIds) {
+        if (!id) continue;
+        try { await LibraryStore.delete(id); } catch {}
+      }
+      for (const item of reconciled) {
+        try { await LibraryStore.put(item); } catch {}
+      }
+    }
+    return reconciled;
+  }
+
   function populateLibraryCategoryFilter() {
     if (!el.libraryCategoryFilter) return;
     const current = state.libraryFilters.category || "all";
@@ -1824,7 +1961,9 @@ async function tryLoadCachedGeneratedImage(charName) {
     if (filters.search) {
       const needle = filters.search.toLowerCase();
       output = output.filter((item) => {
-        const hay = `${item.name || ""} ${item.characterName || ""} ${item.officialName || ""} ${item.summary || ""}`.toLowerCase();
+        const localText = getEntryLocalizedText(item, curLang());
+        const localSummary = buildCondensedMainOutput(localText || item.summary || "");
+        const hay = `${item.name || ""} ${item.characterName || ""} ${item.officialName || ""} ${item.summary || ""} ${localSummary} ${item.textEn || ""} ${item.textEs || ""}`.toLowerCase();
         return hay.includes(needle);
       });
     }
@@ -1844,10 +1983,14 @@ async function tryLoadCachedGeneratedImage(charName) {
   function buildLibraryItemMarkup(entry) {
     const catLabel = categoryLabelFor(entry.category || "any");
     const dateLabel = formatTimestamp(entry.createdAt || entry.timestamp);
-    const summary = escapeHtml(entry.summary || buildCondensedMainOutput(entry.textEn || entry.text || ""));
+    const localizedText = getEntryLocalizedText(entry, curLang());
+    const summary = escapeHtml(buildCondensedMainOutput(localizedText || entry.summary || ""));
     const name = escapeHtml(entry.characterName || entry.officialName || entry.searchName || entry.id);
     const fav = !!(entry.isFavorite ?? entry.favorite);
     const favLabel = fav ? t("libraryActionUnfavorite") : t("libraryActionFavorite");
+    const openLabel = t("libraryActionView");
+    const downloadLabel = t("libraryActionDownload");
+    const deleteLabel = t("libraryActionDelete");
     const favAction = fav ? "unfavorite" : "favorite";
     const thumbUrl = entry.imageUrl ? escapeHtml(entry.imageUrl) : "";
     const thumbImg = thumbUrl ? `<img src="${thumbUrl}" alt="${name}" loading="lazy" />` : "";
@@ -1873,9 +2016,15 @@ async function tryLoadCachedGeneratedImage(charName) {
             <div class="charFact">${t("libraryTimePrefix")} · ${escapeHtml(catLabel)} · ${escapeHtml(dateLabel)}</div>
           </div>
           <div class="library-item-actions">
-            <button class="pill-btn primary glass-button" data-action="view">${t("libraryActionView")}</button>
-            <button class="pill-btn glass-button" data-action="${favAction}">${favLabel}</button>
-            <button class="pill-btn danger glass-button" data-action="delete">${t("libraryActionDelete")}</button>
+            <button class="library-icon-btn" data-action="view" aria-label="${escapeHtml(openLabel)}" title="${escapeHtml(openLabel)}">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12s3.8-6 9-6 9 6 9 6-3.8 6-9 6-9-6-9-6zm9 3.3a3.3 3.3 0 1 0 0-6.6 3.3 3.3 0 0 0 0 6.6z" fill="currentColor"/></svg>
+            </button>
+            <button class="library-icon-btn" data-action="download" aria-label="${escapeHtml(downloadLabel)}" title="${escapeHtml(downloadLabel)}">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a1 1 0 0 1 1 1v8.59l2.3-2.3a1 1 0 1 1 1.4 1.42l-4 4a1 1 0 0 1-1.4 0l-4-4a1 1 0 1 1 1.4-1.42L11 12.6V4a1 1 0 0 1 1-1zm-7 14a1 1 0 0 1 1 1v1h12v-1a1 1 0 1 1 2 0v2a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-2a1 1 0 0 1 1-1z" fill="currentColor"/></svg>
+            </button>
+            <button class="library-icon-btn danger" data-action="delete" aria-label="${escapeHtml(deleteLabel)}" title="${escapeHtml(deleteLabel)}">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6a1 1 0 0 1 1 1v1h4v2h-1v13a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7H4V5h4V4a1 1 0 0 1 1-1zm1 2v0h4V5h-4zm-3 2v13h10V7H7zm3 3h2v7h-2v-7zm4 0h2v7h-2v-7z" fill="currentColor"/></svg>
+            </button>
           </div>
         </div>
         ${noteIcons ? `<div class="library-notes">${noteIcons}</div>` : ""}
@@ -1885,7 +2034,8 @@ async function tryLoadCachedGeneratedImage(charName) {
 
   function renderLibraryList() {
     if (!el.libraryList) return;
-    const filtered = applyLibraryFilters(state.libraryItems);
+    const canonical = dedupeCanonicalEntriesForView(state.libraryItems);
+    const filtered = applyLibraryFilters(canonical);
     el.libraryList.innerHTML = filtered.map(buildLibraryItemMarkup).join("");
     if (el.libraryEmptyState) {
       el.libraryEmptyState.style.display = filtered.length ? "none" : "block";
@@ -1897,7 +2047,8 @@ async function tryLoadCachedGeneratedImage(charName) {
 
   function renderFavoritesList() {
     if (!el.favoritesList) return;
-    const favorites = state.libraryItems.filter((item) => item.isFavorite ?? item.favorite);
+    const canonical = dedupeCanonicalEntriesForView(state.libraryItems);
+    const favorites = canonical.filter((item) => item.isFavorite ?? item.favorite);
     el.favoritesList.innerHTML = favorites.map(buildLibraryItemMarkup).join("");
     if (el.favoritesEmptyState) {
       el.favoritesEmptyState.style.display = favorites.length ? "none" : "block";
@@ -1998,6 +2149,13 @@ async function tryLoadCachedGeneratedImage(charName) {
       return;
     }
 
+    if (action === "download") {
+      downloadLibraryCard(itemEl, entry).catch((err) => {
+        console.warn("Library download failed", err?.message || err);
+      });
+      return;
+    }
+
     if (action === "delete") {
       state.libraryItems = state.libraryItems.filter((item) => item.id !== id);
       LibraryStore.delete(id).catch((err) => console.warn("Delete failed", err?.message));
@@ -2023,6 +2181,13 @@ async function tryLoadCachedGeneratedImage(charName) {
       el.librarySearchInput.addEventListener("input", (e) => {
         state.libraryFilters.search = e.target.value.trim().toLowerCase();
         renderLibraryList();
+      });
+      el.librarySearchInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          // Prevent accidental Enter bubbling from triggering unrelated actions.
+          e.preventDefault();
+          e.stopPropagation();
+        }
       });
     }
     if (el.libraryCategoryFilter) {
@@ -2057,13 +2222,288 @@ async function tryLoadCachedGeneratedImage(charName) {
   async function initLibrary() {
     try {
       const entries = await LibraryStore.getAll();
-      state.libraryItems = Array.isArray(entries) ? entries.map(normalizeLibraryEntry) : [];
+      state.libraryItems = await reconcileCanonicalLibraryEntries(entries);
       state.libraryReady = true;
       renderLibraryList();
       renderFavoritesList();
+      hydrateLibraryTranslationsIfNeeded().catch(() => {});
     } catch (err) {
       console.warn("Library init failed", err?.message);
     }
+  }
+
+  function drawRoundedRect(ctx, x, y, w, h, r) {
+    const radius = Math.max(0, Math.min(r, Math.min(w, h) / 2));
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.arcTo(x + w, y, x + w, y + h, radius);
+    ctx.arcTo(x + w, y + h, x, y + h, radius);
+    ctx.arcTo(x, y + h, x, y, radius);
+    ctx.arcTo(x, y, x + w, y, radius);
+    ctx.closePath();
+  }
+
+  function wrapTextLines(ctx, text, maxWidth, maxLines = 6) {
+    const raw = String(text || "").replace(/\s+/g, " ").trim();
+    if (!raw) return [];
+    const words = raw.split(" ");
+    const lines = [];
+    let line = "";
+    for (const word of words) {
+      const next = line ? `${line} ${word}` : word;
+      if (ctx.measureText(next).width <= maxWidth) {
+        line = next;
+      } else {
+        if (line) lines.push(line);
+        line = word;
+      }
+      if (lines.length >= maxLines) break;
+    }
+    if (lines.length < maxLines && line) lines.push(line);
+    if (lines.length > maxLines) lines.length = maxLines;
+    if (lines.length === maxLines) {
+      const last = lines[maxLines - 1];
+      if (ctx.measureText(last).width > maxWidth - 20) {
+        lines[maxLines - 1] = `${last.slice(0, Math.max(0, last.length - 3))}...`;
+      }
+    }
+    return lines;
+  }
+
+  function loadImageElement(src) {
+    return new Promise((resolve) => {
+      if (!src) return resolve(null);
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => resolve(img);
+      img.onerror = () => resolve(null);
+      img.src = src;
+    });
+  }
+
+  async function buildShareCardCanvas(entry) {
+    const width = 1200;
+    const height = 1550;
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("captureFailed");
+
+    const textSource = curLang() === "es"
+      ? (entry?.textEs || entry?.textEn || entry?.text || "")
+      : (entry?.textEn || entry?.textEs || entry?.text || "");
+    const summary = buildCondensedMainOutput(textSource || entry?.summary || "");
+    const notes = (Array.isArray(entry?.notes) && entry.notes.length)
+      ? entry.notes.slice(0, 4)
+      : parseNotesFromResult(textSource || "").slice(0, 4);
+    const name = String(entry?.characterName || entry?.name || entry?.officialName || "Unknown").trim() || "Unknown";
+    const category = categoryLabelFor(entry?.category || state?.selectedCategory || "any");
+    const universe = String(entry?.universe || "").trim();
+    const imageUrl = entry?.imageUrl || state.currentImageUrl || "";
+
+    // Background
+    const bg = ctx.createLinearGradient(0, 0, width, height);
+    bg.addColorStop(0, "#140c2b");
+    bg.addColorStop(0.45, "#3a295a");
+    bg.addColorStop(1, "#6a496f");
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, width, height);
+
+    // Ambient glow
+    ctx.globalAlpha = 0.55;
+    const g1 = ctx.createRadialGradient(width * 0.75, height * 0.2, 40, width * 0.75, height * 0.2, 360);
+    g1.addColorStop(0, "rgba(255,170,220,.85)");
+    g1.addColorStop(1, "rgba(255,170,220,0)");
+    ctx.fillStyle = g1;
+    ctx.fillRect(0, 0, width, height);
+    const g2 = ctx.createRadialGradient(width * 0.2, height * 0.85, 40, width * 0.2, height * 0.85, 340);
+    g2.addColorStop(0, "rgba(120,220,255,.65)");
+    g2.addColorStop(1, "rgba(120,220,255,0)");
+    ctx.fillStyle = g2;
+    ctx.fillRect(0, 0, width, height);
+    ctx.globalAlpha = 1;
+
+    // Main glass panel
+    drawRoundedRect(ctx, 80, 80, width - 160, height - 160, 36);
+    ctx.fillStyle = "rgba(18,22,40,.55)";
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = "rgba(255,255,255,.22)";
+    ctx.stroke();
+
+    // Branding
+    const logo = await loadImageElement("assets/brand/logo-en.png");
+    if (logo) {
+      ctx.drawImage(logo, 120, 150, 280, 120);
+    }
+    ctx.font = "700 42px Sora, Segoe UI, sans-serif";
+    ctx.fillStyle = "rgba(255,255,255,.96)";
+    ctx.fillText(name, 120, 330);
+    ctx.font = "600 24px Sora, Segoe UI, sans-serif";
+    ctx.fillStyle = "rgba(225,232,255,.85)";
+    ctx.fillText(universe || "What's the Smell?", 120, 368);
+
+    // Category pill
+    drawRoundedRect(ctx, width - 430, 255, 300, 58, 29);
+    ctx.fillStyle = "rgba(8,12,28,.72)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(180,200,255,.35)";
+    ctx.stroke();
+    ctx.font = "700 24px Sora, Segoe UI, sans-serif";
+    ctx.fillStyle = "#eaf1ff";
+    ctx.textAlign = "center";
+    ctx.fillText(category, width - 280, 293);
+    ctx.textAlign = "start";
+
+    // Image frame
+    drawRoundedRect(ctx, 120, 420, 430, 560, 28);
+    ctx.fillStyle = "rgba(250,252,255,.88)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,.4)";
+    ctx.stroke();
+
+    const charImg = await loadImageElement(imageUrl);
+    if (charImg) {
+      const imgX = 136;
+      const imgY = 436;
+      const imgW = 398;
+      const imgH = 528;
+      const scale = Math.max(imgW / charImg.width, imgH / charImg.height);
+      const dw = charImg.width * scale;
+      const dh = charImg.height * scale;
+      const dx = imgX + (imgW - dw) / 2;
+      const dy = imgY + (imgH - dh) / 2;
+      ctx.save();
+      drawRoundedRect(ctx, imgX, imgY, imgW, imgH, 20);
+      ctx.clip();
+      ctx.drawImage(charImg, dx, dy, dw, dh);
+      ctx.restore();
+    } else {
+      ctx.font = "600 22px Sora, Segoe UI, sans-serif";
+      ctx.fillStyle = "rgba(80,90,120,.9)";
+      ctx.fillText("No image available", 220, 700);
+    }
+
+    // Summary block
+    drawRoundedRect(ctx, 580, 420, 500, 560, 28);
+    ctx.fillStyle = "rgba(20,24,42,.58)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(190,205,255,.22)";
+    ctx.stroke();
+    ctx.font = "700 24px Sora, Segoe UI, sans-serif";
+    ctx.fillStyle = "rgba(240,246,255,.95)";
+    ctx.fillText(curLang() === "es" ? "Perfil Aromatico" : "Aroma Profile", 614, 468);
+    ctx.font = "500 30px Sora, Segoe UI, sans-serif";
+    const lines = wrapTextLines(ctx, summary, 430, 14);
+    let y = 514;
+    for (const line of lines) {
+      ctx.fillStyle = "rgba(232,238,255,.92)";
+      ctx.fillText(line, 614, y);
+      y += 42;
+    }
+
+    // Notes row
+    drawRoundedRect(ctx, 120, 1030, width - 240, 190, 24);
+    ctx.fillStyle = "rgba(16,20,34,.6)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(180,205,255,.25)";
+    ctx.stroke();
+    ctx.font = "700 22px Sora, Segoe UI, sans-serif";
+    ctx.fillStyle = "rgba(240,246,255,.95)";
+    ctx.fillText(curLang() === "es" ? "Notas" : "Notes", 150, 1078);
+    ctx.font = "600 22px Sora, Segoe UI, sans-serif";
+    notes.forEach((note, idx) => {
+      const px = 150 + (idx % 2) * 450;
+      const py = 1128 + Math.floor(idx / 2) * 54;
+      drawRoundedRect(ctx, px, py - 30, 380, 40, 20);
+      ctx.fillStyle = "rgba(255,255,255,.11)";
+      ctx.fill();
+      ctx.fillStyle = "rgba(233,240,255,.94)";
+      ctx.fillText(String(note), px + 18, py - 3);
+    });
+
+    // Footer
+    const ts = formatTimestamp(entry?.createdAt || entry?.timestamp || Date.now());
+    ctx.font = "500 20px Sora, Segoe UI, sans-serif";
+    ctx.fillStyle = "rgba(222,232,255,.82)";
+    ctx.fillText(`Generated with What's the Smell? App`, 120, height - 80);
+    ctx.fillStyle = "rgba(200,212,245,.72)";
+    ctx.fillText(ts, width - 360, height - 80);
+
+    return canvas;
+  }
+
+  async function ensureEntryLocalizedForCurrentLang(entry) {
+    const safeEntry = (entry && typeof entry === "object") ? entry : {};
+    if (curLang() !== "es") return safeEntry;
+
+    const existingEs = String(safeEntry.textEs || "").trim();
+    if (looksSpanishText(existingEs)) return safeEntry;
+
+    const enText = String(safeEntry.textEn || safeEntry.text || "").trim();
+    if (!enText) return safeEntry;
+
+    const character = String(
+      safeEntry.characterName ||
+      safeEntry.name ||
+      safeEntry.officialName ||
+      state.lastCharacter ||
+      ""
+    ).trim();
+    const category = String(safeEntry.category || state.selectedCategory || "any").trim() || "any";
+
+    let translated = "";
+    try {
+      const resp = await apiPost("/api/translate", {
+        text: enText,
+        lang: "es",
+        character,
+        category,
+      });
+      translated = String(resp?.text || "").trim();
+    } catch (err) {
+      try {
+        translated = String(await TRANSLATOR.enToEs(enText) || "").trim();
+      } catch {
+        translated = "";
+      }
+    }
+
+    if (!looksSpanishText(translated)) return safeEntry;
+
+    safeEntry.textEs = translated;
+    const normalized = normalizeLibraryEntry(safeEntry);
+    upsertAndRenderEntry(normalized);
+    if (LibraryStore.supported) {
+      try {
+        await LibraryStore.put(normalized);
+      } catch (err) {
+        console.warn("Localized library save failed", err?.message || err);
+      }
+    }
+
+    if (state.detail && normalized.id && state.detail.id === normalized.id) {
+      state.detail.textEs = translated;
+      state.resultEs = translated;
+    }
+    return normalized;
+  }
+
+  async function downloadLibraryCard(itemEl, entry) {
+    const localizedEntry = await ensureEntryLocalizedForCurrentLang(entry || {});
+    const canvas = await buildShareCardCanvas(localizedEntry || {});
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png", 0.92));
+    if (!blob) throw new Error("captureFailed");
+    const name = sanitizeFilename(entry?.name || "card") || "card";
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `wts-${name}-${Date.now()}.png`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
   }
 
   function setFeedbackStatus(message, mode = "info") {
@@ -2237,7 +2677,9 @@ async function tryLoadCachedGeneratedImage(charName) {
 
   async function handleDetailDownload() {
     try {
-      const canvas = await captureDetailCanvas();
+      const entry = state.detail || buildEntryFromState() || {};
+      const localizedEntry = await ensureEntryLocalizedForCurrentLang(entry);
+      const canvas = await buildShareCardCanvas(localizedEntry || {});
       const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png", 0.92));
       if (!blob) throw new Error("captureFailed");
       const url = URL.createObjectURL(blob);
@@ -2256,7 +2698,9 @@ async function tryLoadCachedGeneratedImage(charName) {
 
   async function handleDetailCapture() {
     try {
-      const canvas = await captureDetailCanvas();
+      const entry = state.detail || buildEntryFromState() || {};
+      const localizedEntry = await ensureEntryLocalizedForCurrentLang(entry);
+      const canvas = await buildShareCardCanvas(localizedEntry || {});
       const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png", 0.92));
       if (!blob) throw new Error("captureFailed");
       const file = new File([blob], `wts-card-${Date.now()}.png`, { type: "image/png" });
@@ -2495,10 +2939,12 @@ async function tryLoadCachedGeneratedImage(charName) {
       el.characterImg.style.display = "block";
       el.characterImg.classList.add("is-visible");
       el.characterImg.style.opacity = "1";
+      setImageFrameHasImage(true);
       hideImagePlaceholder();
     } else {
       el.characterImg.removeAttribute("src");
       el.characterImg.style.display = "none";
+      setImageFrameHasImage(false);
       showImagePlaceholder(t("noImageYet"), true);
     }
   }
@@ -2514,7 +2960,7 @@ async function tryLoadCachedGeneratedImage(charName) {
     state.detail = detail;
     state.detailSource = source;
     state.resultEn = detail.textEn || "";
-    state.resultEs = detail.textEs || "";
+    state.resultEs = looksSpanishText(detail.textEs) ? detail.textEs : "";
     state.characterName = detail.characterName || detail.name || detail.officialName || state.characterName;
     state.officialName = detail.officialName || state.officialName;
     state.characterUniverse = detail.universe || detail.metadata?.universe || state.characterUniverse;
@@ -2526,12 +2972,37 @@ async function tryLoadCachedGeneratedImage(charName) {
     if (detail.category) {
       setCategoryValue(detail.category);
     }
+    state.hasResult = true;
     applyDetailImageFromState();
     renderResultForCurrentLang();
-    state.hasResult = true;
     applyLocks();
     updateFavoriteToggle();
     updateDetailActionsVisibility();
+    hydrateDetailTranslationIfNeeded();
+  }
+
+  async function hydrateDetailTranslationIfNeeded() {
+    if (curLang() !== "es" || !state.detail || !state.hasResult) return;
+    if (looksSpanishText(state.resultEs) || looksSpanishText(state.detail.textEs)) return;
+    if (!state.resultEn && !state.detail.textEn) return;
+    try {
+      await ensureTranslation("es", true);
+      if (!state.resultEs) return;
+      state.detail.textEs = state.resultEs;
+      const enriched = buildEntryFromState({
+        id: state.detail.id,
+        timestamp: state.detail.createdAt || state.detail.timestamp || Date.now(),
+        isFavorite: state.detail.favorite,
+        favorite: state.detail.favorite,
+      });
+      if (enriched) {
+        enriched.textEs = state.resultEs;
+        persistEntry(enriched);
+      }
+      renderResultForCurrentLang();
+    } catch (err) {
+      console.warn("Detail ES hydration failed", err?.message || err);
+    }
   }
 
   function buildEntryFromState(overrides = {}) {
@@ -2568,6 +3039,12 @@ async function tryLoadCachedGeneratedImage(charName) {
         lastPrompt: state.lastCharacter,
       },
     };
+  }
+
+  function setImageFrameHasImage(hasImage) {
+    const frame = el.characterImg?.closest(".imgFrame");
+    if (!frame) return;
+    frame.classList.toggle("has-image", !!hasImage);
   }
 
   function upsertAndRenderEntry(entry) {
@@ -2609,6 +3086,7 @@ async function tryLoadCachedGeneratedImage(charName) {
       el.characterImg.classList.remove("is-visible");
       el.characterImg.style.opacity = "0";
     }
+    setImageFrameHasImage(false);
   }
 
   function hideImagePlaceholder() {
@@ -2638,6 +3116,7 @@ async function tryLoadCachedGeneratedImage(charName) {
           if (frame) frame.classList.remove("spinning");
           img.classList.add("is-visible");
           img.style.opacity = "1";
+          setImageFrameHasImage(true);
           hideImagePlaceholder();
           img.onload = null;
           img.onerror = null;
@@ -2648,6 +3127,7 @@ async function tryLoadCachedGeneratedImage(charName) {
           const frame = img.closest('.imgFrame');
           if (frame) frame.classList.remove("spinning");
           img.style.opacity = "0";
+          setImageFrameHasImage(false);
           img.onload = null;
           img.onerror = null;
           showImagePlaceholder(t("imageFailed"), true);
@@ -2697,6 +3177,7 @@ async function tryLoadCachedGeneratedImage(charName) {
         el.characterImg.classList.remove("is-visible");
         el.characterImg.style.opacity = "0";
       }
+      setImageFrameHasImage(false);
       showLoadingSpinner();
       const univ = String(universe || "").trim();
       if (!API_VALID) {
@@ -2706,9 +3187,10 @@ async function tryLoadCachedGeneratedImage(charName) {
       const payload = {
         name,
         category: categoryId || "any",
-        style: "anime",
+        // Match /api/smell background generation params to avoid duplicate paid renders.
+        style: "auto",
         universe: univ,
-        lang: curLang(),
+        lang: "en",
       };
 
       console.log("Fetching image from:", `${API}/api/ai-image`);
@@ -2730,7 +3212,10 @@ async function tryLoadCachedGeneratedImage(charName) {
         throw new Error(errMsg);
       }
 
-      const resolvedUrl = imgUrl.startsWith("http") ? imgUrl : `${API}${imgUrl}`;
+      const resolvedBase = imgUrl.startsWith("http") ? imgUrl : `${API}${imgUrl}`;
+      const cacheBust = `cb=${Date.now()}`;
+      const joiner = resolvedBase.includes("?") ? "&" : "?";
+      const resolvedUrl = `${resolvedBase}${joiner}${cacheBust}`;
       el.characterImg.dataset.lazyImageUrl = resolvedUrl;
       el.characterImg.style.display = "block";
       hideImagePlaceholder();
@@ -2753,6 +3238,7 @@ async function tryLoadCachedGeneratedImage(charName) {
           if (frame) frame.classList.remove("spinning");
           el.characterImg.classList.add("is-visible");
           el.characterImg.style.opacity = "1";
+          setImageFrameHasImage(true);
           state.currentImageUrl = fallbackUrl;
           if (state.detail) state.detail.imageUrl = fallbackUrl;
           return fallbackUrl;
@@ -2764,6 +3250,7 @@ async function tryLoadCachedGeneratedImage(charName) {
       el.characterImg.removeAttribute("src");
       el.characterImg.removeAttribute("data-lazy-image-url");
       el.characterImg.style.display = "none";
+      setImageFrameHasImage(false);
       state.currentImageUrl = "";
       showImagePlaceholder(err?.message || t("imageFailed"), true);
       throw err;
@@ -2816,6 +3303,82 @@ async function tryLoadCachedGeneratedImage(charName) {
     return data;
   }
 
+  function looksSpanishText(text) {
+    const src = String(text || "").trim();
+    if (!src) return false;
+    const lower = src.toLowerCase();
+    if (/[áéíóúñ¿¡]/.test(src)) return true;
+    const spanishHints = [
+      "nombre:", "universo:", "categoría:", "categoria:", "tipo de aroma:",
+      "sensación", "sensacion", "estilo olfativo", "impresión final",
+      "impresion final", "perfil aromático", "perfil aromatico",
+      "perfume sugerido", "notas"
+    ];
+    return spanishHints.some((h) => lower.includes(h));
+  }
+
+  function getEntryLocalizedText(entry, lang = curLang()) {
+    const safeEntry = entry && typeof entry === "object" ? entry : {};
+    const enText = String(safeEntry.textEn || safeEntry.text || "").trim();
+    const esRaw = String(safeEntry.textEs || "").trim();
+    const esText = looksSpanishText(esRaw) ? esRaw : "";
+    if (lang === "es") return esText || enText;
+    return enText || esText;
+  }
+
+  async function hydrateLibraryTranslationsIfNeeded() {
+    if (curLang() !== "es" || state.libraryHydrating) return;
+    const candidates = (state.libraryItems || []).filter((item) => {
+      const enText = String(item?.textEn || item?.text || "").trim();
+      const esText = String(item?.textEs || "").trim();
+      return !!enText && !looksSpanishText(esText);
+    });
+    if (!candidates.length) return;
+
+    state.libraryHydrating = true;
+    let changed = false;
+    try {
+      for (const item of candidates.slice(0, 8)) {
+        const enText = String(item.textEn || item.text || "").trim();
+        if (!enText) continue;
+        let translated = "";
+        try {
+          const resp = await apiPost("/api/translate", {
+            text: enText,
+            lang: "es",
+            character: item.characterName || item.name || item.officialName || "",
+            category: item.category || "any",
+          });
+          translated = String(resp?.text || "").trim();
+        } catch {
+          try {
+            translated = String(await TRANSLATOR.enToEs(enText) || "").trim();
+          } catch {
+            translated = "";
+          }
+        }
+        if (!looksSpanishText(translated)) continue;
+        const next = normalizeLibraryEntry({ ...item, textEs: translated });
+        upsertLibraryItem(next);
+        if (LibraryStore.supported) {
+          try { await LibraryStore.put(next); } catch {}
+        }
+        if (state.detail?.id && state.detail.id === next.id) {
+          state.detail.textEs = translated;
+          state.resultEs = translated;
+          renderResultForCurrentLang();
+        }
+        changed = true;
+      }
+    } finally {
+      state.libraryHydrating = false;
+      if (changed) {
+        renderLibraryList();
+        renderFavoritesList();
+      }
+    }
+  }
+
   async function ensureTranslation(targetLang, isCached = false) {
     // Translate from canonical EN using server endpoint
     if (!state.resultEn) return;
@@ -2823,7 +3386,7 @@ async function tryLoadCachedGeneratedImage(charName) {
     if (targetLang === "en") return;
     
     // Si ya tenemos la traducción y NO viene del cache, retornar rápido
-    if (targetLang === "es" && state.resultEs && !isCached) return;
+    if (targetLang === "es" && state.resultEs && looksSpanishText(state.resultEs) && !isCached) return;
 
     // Solo mostrar "translating" si NO está en cache
     if (!isCached) {
@@ -2831,7 +3394,7 @@ async function tryLoadCachedGeneratedImage(charName) {
     }
     
     // Si viene del cache y ya tenemos resultEs, no hay nada que hacer
-    if (isCached && state.resultEs) {
+    if (isCached && state.resultEs && looksSpanishText(state.resultEs)) {
       return;
     }
     
@@ -2843,10 +3406,12 @@ async function tryLoadCachedGeneratedImage(charName) {
         character: state.lastCharacter,
         category: state.selectedCategory || "any"
       });
-      state.resultEs = resp?.text || state.resultEn;
+      const translated = String(resp?.text || "").trim();
+      state.resultEs = looksSpanishText(translated) ? translated : "";
     } catch (e) {
       // Fallback to local translator if server fails
-      state.resultEs = await TRANSLATOR.enToEs(state.resultEn);
+      const fallback = String(await TRANSLATOR.enToEs(state.resultEn) || "").trim();
+      state.resultEs = looksSpanishText(fallback) ? fallback : "";
     }
   }
 
@@ -2880,7 +3445,7 @@ async function tryLoadCachedGeneratedImage(charName) {
     }
 
     // Use appropriate language for rendering
-    const txt = lang === "es" ? (detail.textEs || detail.textEn) : (detail.textEn || detail.textEs);
+    const txt = getEntryLocalizedText(detail, lang);
     
     // For output box, show only the condensed aroma profile (not the whole result)
     const condensedOutput = buildCondensedMainOutput(txt || "");
@@ -2945,22 +3510,30 @@ async function tryLoadCachedGeneratedImage(charName) {
       const data = await apiPost("/api/smell", {
         prompt: character,
         category: state.selectedCategory || "any",
-        lang: "en",
-        includeEs: true,
+        lang: curLang(),
+        includeEs: curLang() === "es",
       });
 
       console.log("API Response:", data);
 
       state.resultEn = String(data?.textEn || data?.text || "").trim();
       state.resultEs = String(data?.textEs || "").trim();
+      const resolvedCategory = String(data?.resolvedCategory || state.selectedCategory || "any").trim();
+      const categoryWasOverridden = !!data?.categoryOverridden;
       
       // Usar el nombre oficial que viene del servidor (normalizado)
       state.officialName = String(data?.officialName || character).trim();
+      if (resolvedCategory && resolvedCategory !== "any" && resolvedCategory !== state.selectedCategory) {
+        setCategoryValue(resolvedCategory);
+      }
       
       console.log("State after response:", {
         resultEn: state.resultEn.slice(0, 150),
         resultEs: state.resultEs.slice(0, 150),
         officialName: state.officialName,
+        requestedCategory: data?.requestedCategory,
+        resolvedCategory,
+        categoryWasOverridden,
       });
       
       // Validar que tenemos al menos una respuesta en inglés
@@ -2986,7 +3559,7 @@ async function tryLoadCachedGeneratedImage(charName) {
       });
 
       // Prepare tasks and wait before rendering
-      const imagePromise = setCharacterImage(state.officialName, state.selectedCategory, state.characterUniverse)
+      const imagePromise = setCharacterImage(state.officialName, resolvedCategory, state.characterUniverse)
         .catch(imgErr => {
           console.error("Image generation failed:", imgErr.message);
           return null;
@@ -3090,6 +3663,7 @@ async function tryLoadCachedGeneratedImage(charName) {
     el.characterImg.removeAttribute("src");
     el.characterImg.removeAttribute("data-lazy-image-url");
     el.characterImg.style.opacity = "0";
+    setImageFrameHasImage(false);
     hideImagePlaceholder();
     state.currentImageError = "";
     
@@ -3142,7 +3716,7 @@ async function tryLoadCachedGeneratedImage(charName) {
     }
 
     // If there is a result and user switched to ES, translate once
-    if (state.hasResult && curLang() === "es" && !state.resultEs) {
+    if (state.hasResult && curLang() === "es" && !looksSpanishText(state.resultEs)) {
       try {
         setBusy(true);
         await ensureTranslation("es");
@@ -3159,6 +3733,7 @@ async function tryLoadCachedGeneratedImage(charName) {
     }
 
     renderResultForCurrentLang();
+    hydrateLibraryTranslationsIfNeeded().catch(() => {});
   }
 
   function bindLangSwitch() {
@@ -3279,12 +3854,15 @@ async function tryLoadCachedGeneratedImage(charName) {
       applyLocks();
     });
 
-    // Enter in character input triggers generate (when allowed)
+    // Enter in search input triggers the same flow as Identify scent.
     el.characterInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && !state.busy && !state.hasResult) {
+      if (e.key !== "Enter") return;
+      if (state.busy || state.hasResult) {
         e.preventDefault();
-        onGenerate();
+        return;
       }
+      e.preventDefault();
+      onGenerate();
     });
 
     applyLocks();

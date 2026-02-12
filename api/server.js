@@ -2,6 +2,7 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import compression from "compression";
+import fs from "fs";
 import path, { dirname } from "path";
 import { fileURLToPath } from "url";
 import crypto from "crypto";
@@ -55,6 +56,61 @@ const __dirname = dirname(__filename);
 
 // Carpeta Frontend (F mayúscula)
 const FRONTEND_DIR = path.join(__dirname, "..", "Frontend");
+const GENERATED_DIR = path.join(FRONTEND_DIR, "generated");
+
+function existingPublicImageUrl(candidates = []) {
+  for (const candidate of candidates) {
+    const url = String(candidate || "").trim();
+    if (!url) continue;
+    if (/^https?:\/\//i.test(url)) return url;
+    if (url.startsWith("/")) {
+      const diskPath = path.join(FRONTEND_DIR, url.replace(/^\//, ""));
+      if (fs.existsSync(diskPath)) return url;
+    }
+  }
+  return "";
+}
+
+function getCanonicalImageOverride(name) {
+  const normalized = normalizeCharacterName(name);
+  const overrides = {
+    "joel": ["/generated/joel-miller.png"],
+    "joel miller": ["/generated/joel-miller.png"],
+    "naruto": [
+      process.env.NARUTO_CANONICAL_IMAGE_URL || "",
+      "/generated/naruto-uzumaki.png",
+      "/generated/naruto-uzumaki.webp",
+    ],
+    "naruto uzumaki": [
+      process.env.NARUTO_CANONICAL_IMAGE_URL || "",
+      "/generated/naruto-uzumaki.png",
+      "/generated/naruto-uzumaki.webp",
+    ],
+  };
+
+  return existingPublicImageUrl(overrides[normalized] || []);
+}
+
+function toClientSafeErrorDetails(err) {
+  const raw = String(err?.message || err || "");
+  try {
+    const parsed = JSON.parse(raw);
+    const reason = String(parsed?.error?.details?.[0]?.reason || "").toUpperCase();
+    const msg = String(parsed?.error?.message || "");
+    if (reason === "API_KEY_INVALID" || /api key expired/i.test(msg)) {
+      return {
+        status: 503,
+        error: "AI provider unavailable",
+        details: "Local Gemini API key is invalid or expired. Update GEMINI_API_KEY in api/.env and restart backend.",
+      };
+    }
+  } catch {}
+  return {
+    status: 500,
+    error: "Failed to generate",
+    details: raw,
+  };
+}
 
 // OPTIMIZATION: Enable GZIP compression for all responses
 app.use(compression({
@@ -175,8 +231,27 @@ function getOfficialCharacterName(searchName) {
   return characterIndex[normalized] || searchName;
 }
 
+function resolveCanonicalCharacterName(candidateName, fallbackName = "") {
+  const direct = getOfficialCharacterName(candidateName);
+  if (direct && direct !== candidateName) return direct;
+  if (fallbackName) {
+    const fromFallback = getOfficialCharacterName(fallbackName);
+    if (fromFallback && fromFallback !== fallbackName) return fromFallback;
+  }
+  return candidateName;
+}
+
 async function getCachedSmell({ name, category, lang }) {
   const cacheKey = buildSmellKey({ name, category, lang, promptVersion: PROMPT_VERSION });
+
+  // Prefer curated seed responses for known characters.
+  // This prevents stale/generated persistent entries from overriding trusted seed content.
+  const seedText = getSeedSmell(name, lang);
+  if (seedText) {
+    responseCache.set(cacheKey, seedText);
+    return { text: seedText, cacheHit: true, source: "seed", cacheKey };
+  }
+
   const memoryHit = responseCache.get(cacheKey);
   if (memoryHit) {
     return { text: memoryHit, cacheHit: true, source: "memory", cacheKey };
@@ -186,11 +261,6 @@ async function getCachedSmell({ name, category, lang }) {
   if (persistent && persistent.text) {
     responseCache.set(cacheKey, persistent.text);
     return { text: persistent.text, cacheHit: true, source: "persistent", cacheKey };
-  }
-
-  const seedText = getSeedSmell(name, lang);
-  if (seedText) {
-    return { text: seedText, cacheHit: true, source: "seed", cacheKey };
   }
 
   return { text: null, cacheHit: false, source: "miss", cacheKey };
@@ -223,6 +293,65 @@ function sha1(s) {
 function normalizeLang(x) {
   const v = String(x || "").toLowerCase();
   return v.startsWith("es") ? "es" : "en";
+}
+
+function normalizeCategoryId(raw) {
+  const v = String(raw || "").trim().toLowerCase();
+  if (!v || v === "any") return "any";
+  if (v.includes("anime") || v.includes("manga")) return "anime";
+  if (v.includes("game") || v.includes("videojuego") || v.includes("video game")) return "games";
+  if (v.includes("movie") || v.includes("tv") || v.includes("pel") || v.includes("serie") || v.includes("show")) return "movies";
+  if (v.includes("comic")) return "comics";
+  if (v.includes("book") || v.includes("novel") || v.includes("libro")) return "books";
+  if (v.includes("cartoon") || v.includes("caricatura")) return "cartoons";
+  if (v.includes("myth") || v.includes("folklore") || v.includes("mito")) return "myth";
+  return v;
+}
+
+const CHARACTER_NATURE_OVERRIDES = {
+  "joel miller": "games",
+};
+
+const CHARACTER_DISPLAY_NAME_OVERRIDES = {
+  "joel": "Joel Miller",
+  "joel miller": "Joel Miller",
+  "naruto": "Naruto Uzumaki",
+  "naruto uzumaki": "Naruto Uzumaki",
+};
+
+function toCanonicalDisplayName(name) {
+  const normalized = normalizeCharacterName(name);
+  return CHARACTER_DISPLAY_NAME_OVERRIDES[normalized] || String(name || "").trim();
+}
+
+async function inferCharacterNatureCategory(name, requestedCategory) {
+  const normalizedName = normalizeCharacterName(name);
+  const req = normalizeCategoryId(requestedCategory);
+  if (!normalizedName) return req;
+  if (CHARACTER_NATURE_OVERRIDES[normalizedName]) {
+    return CHARACTER_NATURE_OVERRIDES[normalizedName];
+  }
+
+  // Heuristic from known universe in curated seed text
+  const seedEn = getSeedSmell(name, "en") || "";
+  const universe = String((seedEn.match(/Universe:\s*([^\n]+)/i)?.[1] || "")).toLowerCase();
+  if (universe) {
+    if (
+      universe.includes("last of us") ||
+      universe.includes("resident evil") ||
+      universe.includes("final fantasy") ||
+      universe.includes("metal gear") ||
+      universe.includes("zelda") ||
+      universe.includes("halo")
+    ) {
+      return "games";
+    }
+    if (universe.includes("naruto") || universe.includes("dragon ball") || universe.includes("one piece") || universe.includes("bleach")) {
+      return "anime";
+    }
+  }
+
+  return req;
 }
 
 function normKey(s) {
@@ -297,6 +426,22 @@ function buildImageCacheKey({ name, category, style, lang, universe }) {
 
 async function getCachedImage({ name, category, style, lang, universe }) {
   const cacheKey = buildImageCacheKey({ name, category, style, lang, universe });
+
+  // Canonical single-profile image overrides
+  const forced = getCanonicalImageOverride(name);
+  if (forced) {
+    imageCache.set(cacheKey, forced);
+    return { imageUrl: forced, cacheHit: true, source: "seed", cacheKey, provider: "seed" };
+  }
+
+  // Prefer curated seed image first to avoid stale/wrong persistent image overrides.
+  const seedName = toCanonicalDisplayName(name);
+  const seedUrl = getSeedImage(seedName, lang) || getSeedImage(name, lang);
+  if (seedUrl) {
+    imageCache.set(cacheKey, seedUrl);
+    return { imageUrl: seedUrl, cacheHit: true, source: "seed", cacheKey, provider: "seed" };
+  }
+
   const memoryHit = imageCache.get(cacheKey);
   if (memoryHit) {
     return { imageUrl: memoryHit, cacheHit: true, source: "memory", cacheKey };
@@ -306,11 +451,6 @@ async function getCachedImage({ name, category, style, lang, universe }) {
   if (persistent && persistent.imageUrl) {
     imageCache.set(cacheKey, persistent.imageUrl);
     return { imageUrl: persistent.imageUrl, cacheHit: true, source: "persistent", cacheKey, provider: persistent.provider };
-  }
-
-  const seedUrl = getSeedImage(name, lang);
-  if (seedUrl) {
-    return { imageUrl: seedUrl, cacheHit: true, source: "seed", cacheKey, provider: "seed" };
   }
 
   return { imageUrl: null, cacheHit: false, source: "miss", cacheKey };
@@ -346,6 +486,151 @@ function buildImagePrompt(name, category, style, universe = "") {
   const base = String(name || "").trim();
   const univ = String(universe || "").trim();
   const cat = String(category || "").trim();
+  const styleHint = String(style || "").trim().toLowerCase();
+  const normalized = normalizeCharacterName(base);
+
+  const VISUAL_BIBLE = {
+    "captain america": {
+      canon: "Steve Rogers",
+      traits: [
+        "adult athletic male, square jaw, clean-shaven",
+        "blue tactical suit with white star centered on chest",
+        "red-white-blue palette, combat straps and gloves",
+        "short neat light-brown/blond hair",
+      ],
+      forbid: ["anime hairstyle", "wrong superhero logo", "casual civilian outfit"],
+    },
+    "choso": {
+      canon: "Choso (Jujutsu Kaisen)",
+      traits: [
+        "pale skin, long dark hair tied back",
+        "distinct dark blood-mark face paint across nose and under eyes",
+        "black high-collar outfit with layered sleeves",
+      ],
+      forbid: ["muscular armor", "bright colorful shonen costume", "different face markings"],
+    },
+    "chozo": {
+      canon: "Chozo race (Metroid)",
+      traits: [
+        "avian humanoid alien with beak-like facial structure",
+        "ancient advanced armor motifs, metallic and ceremonial",
+        "regal stoic posture",
+      ],
+      forbid: ["human face", "anime school uniform", "modern civilian clothes"],
+    },
+    "goku black": {
+      canon: "Goku Black (Dragon Ball Super)",
+      traits: [
+        "spiky black Goku-style hair",
+        "dark grey/black gi with high collar, red sash belt",
+        "green Potara earring on one ear",
+      ],
+      forbid: ["orange gi", "Super Saiyan blond hair", "missing Potara earring"],
+    },
+    "link": {
+      canon: "Link (The Legend of Zelda)",
+      traits: [
+        "young heroic elf-like male with pointed ears",
+        "blond hair, blue/green iconic fantasy tunic style",
+        "Hylian adventurer aesthetic",
+      ],
+      forbid: ["modern urban clothes", "firearms", "non-elf ears"],
+    },
+    "madara": {
+      canon: "Madara Uchiha (Naruto)",
+      traits: [
+        "long wild black hair",
+        "pale skin, stern mature face",
+        "dark red segmented armor over shinobi clothing",
+      ],
+      forbid: ["short hair", "bright modern outfit", "child proportions"],
+    },
+    "steve hyuga": {
+      canon: "Steve Hyuga (custom profile in this app)",
+      traits: [
+        "adult male with Byakugan-inspired pale eyes",
+        "Hyuga-inspired ninja styling, calm and disciplined expression",
+        "neutral dark shinobi attire with subtle modern touch",
+      ],
+      forbid: ["cartoon mascot style", "superhero armor", "random franchise symbols"],
+    },
+    "suguru geto": {
+      canon: "Suguru Geto (Jujutsu Kaisen)",
+      traits: [
+        "long black hair tied in a half-up style",
+        "elongated earlobes, calm intimidating expression",
+        "dark monk-like robe outfit",
+      ],
+      forbid: ["short hair", "bright colorful battle suit", "modern casual hoodie"],
+    },
+    "tanjiro kamado": {
+      canon: "Tanjiro Kamado (Demon Slayer)",
+      traits: [
+        "short dark burgundy hair, scar on forehead",
+        "hanafuda earrings clearly visible",
+        "green-black checkered haori over demon slayer uniform",
+      ],
+      forbid: ["different earring style", "missing forehead scar", "modern clothing"],
+    },
+    "toji fushiguro": {
+      canon: "Toji Fushiguro (Jujutsu Kaisen)",
+      traits: [
+        "adult muscular male with short dark hair",
+        "sharp eyes, faint facial scar detail",
+        "tight black shirt / dark combat clothing",
+      ],
+      forbid: ["teen body proportions", "flashy fantasy armor", "bright hero costume"],
+    },
+    "naruto uzumaki": {
+      canon: "Naruto Uzumaki",
+      traits: [
+        "spiky blond hair, blue eyes, whisker-like cheek marks",
+        "orange-black shinobi outfit",
+        "metal Leaf Village forehead protector with engraved leaf symbol",
+      ],
+      forbid: ["different hair color", "no whisker marks", "non-ninja modern outfit", "text or lettering on forehead protector"],
+    },
+    "naruto": {
+      canon: "Naruto Uzumaki",
+      traits: [
+        "spiky blond hair, blue eyes, whisker-like cheek marks",
+        "orange-black shinobi outfit",
+        "metal Leaf Village forehead protector with engraved leaf symbol",
+      ],
+      forbid: ["different hair color", "no whisker marks", "non-ninja modern outfit", "text or lettering on forehead protector"],
+    },
+  };
+
+  const anchor = VISUAL_BIBLE[normalized] || null;
+  const styleGuideByCategory = {
+    anime: "Official anime key visual style. Clean line art, cel shading, and anime-accurate facial proportions.",
+    games: "Official game key art style. Production-quality rendering matching the game's canonical look.",
+    movies: "Official source-medium style. Use live-action likeness for live-action franchises and animation style for animated franchises.",
+    comics: "Official comic-book illustration style. Strong inks, graphic shading, and canonical costume rendering.",
+    books: "Official book-cover illustration style consistent with the franchise adaptation language.",
+    cartoons: "Official cartoon style from the original series. Preserve simplified shapes and palette logic.",
+    myth: "Classical mythic illustration style with grounded historical motifs (not modern cosplay).",
+  };
+  const categoryKey = normalizeCategoryId(cat) || "any";
+  const fallbackStyleGuide = styleGuideByCategory[categoryKey] || "Official franchise visual language matching the original source material.";
+  const styleLine = styleHint && styleHint !== "auto" && styleHint !== "any"
+    ? `Requested style mode: ${styleHint}. Keep identity 1:1 canonical while applying only this source-consistent rendering mode.`
+    : `Style mode: auto by category (${categoryKey}). ${fallbackStyleGuide}`;
+
+  const identityLines = anchor
+    ? [
+        `Canonical target: ${anchor.canon}`,
+        "Mandatory visual anchors:",
+        ...anchor.traits.map((t) => `- ${t}`),
+        "Strict negatives:",
+        ...anchor.forbid.map((f) => `- ${f}`),
+      ].join("\n")
+    : [
+        "Canonical target: Use the single most iconic official design for this character.",
+        "- Resolve to one franchise/universe only (no fusion or mixed continuities).",
+        "- Prefer default/base form outfit and appearance (not event skins, alternates, or fan variants).",
+        "- If universe is missing, infer the most globally recognized canonical universe from the name.",
+      ].join("\n");
 
   // Template mejorado con datos de ficha
   const prompt = `Ultra-accurate canonical character illustration.
@@ -354,6 +639,8 @@ Character identity:
 Name: ${base}
 Universe: ${univ || "Unknown"}
 Category/Role: ${cat || "Character"}
+${identityLines}
+${styleLine}
 
 Identity rules (MANDATORY):
 - The character must match the official canonical appearance from the specified universe
@@ -381,11 +668,14 @@ Strictly prohibited:
 - Age changes
 - Hair or eye color variation
 - Accessories not present in canon
+- Text, logos, watermarks, signatures, UI overlays in the image
 
 Quality:
 - Masterpiece
 - High fidelity
-- Consistent anatomy`;
+- Consistent anatomy
+- High facial likeness
+- Instant recognizability for franchise fans`;
 
   return prompt;
 }
@@ -853,7 +1143,8 @@ app.post("/api/smell", async (req, res) => {
   
   try {
     const prompt = String(req.body?.prompt || "").trim();
-    const category = String(req.body?.category || "any").trim();
+    const requestedCategory = String(req.body?.category || "any").trim();
+    let category = normalizeCategoryId(requestedCategory);
     const requestedLang = normalizeLang(req.body?.lang || "en");
     const includeEs = Boolean(req.body?.includeEs);
 
@@ -870,12 +1161,21 @@ app.post("/api/smell", async (req, res) => {
     // Convierte "naruto", "uzumaki naruto", "naruto uzumaki" → "Naruto Uzumaki" (nombre oficial de Ficha)
     let formalCharacterName = await geminiNormalizeCharacterSearch(prompt, category);
     console.log(`Normalized: "${prompt}" → "${formalCharacterName}"`);
-    
-    // 2) Si Gemini devolvió UNKNOWN, usar la búsqueda original normalizada
-    if (formalCharacterName === prompt) {
-      const normalizedSearch = normalizeCharacterName(prompt);
-      formalCharacterName = getOfficialCharacterName(normalizedSearch) || prompt;
-      console.log(`Fallback to local: "${prompt}" → "${formalCharacterName}"`);
+
+    // 2) Resolver al nombre canónico del índice local para evitar misses tipo "Joel" vs "Joel Miller"
+    const resolvedFromIndex = resolveCanonicalCharacterName(formalCharacterName, prompt);
+    if (resolvedFromIndex !== formalCharacterName) {
+      console.log(`Canonicalized from index: "${formalCharacterName}" → "${resolvedFromIndex}"`);
+      formalCharacterName = resolvedFromIndex;
+    }
+    formalCharacterName = toCanonicalDisplayName(formalCharacterName);
+
+    // 2b) Resolve character nature/category and override mismatches.
+    const canonicalNature = await inferCharacterNatureCategory(formalCharacterName, category);
+    const categoryOverridden = canonicalNature && canonicalNature !== category;
+    if (categoryOverridden) {
+      console.log(`Category override for "${formalCharacterName}": requested="${category}" → canonical="${canonicalNature}"`);
+      category = canonicalNature;
     }
     
     // 3) Registrar esta variación para búsquedas futuras
@@ -920,7 +1220,7 @@ app.post("/api/smell", async (req, res) => {
         console.log("Smell: Generando respuesta para:", prompt);
         const inflight = (async () => {
           try {
-            const out = await geminiGenerateSmellEN({ character: prompt, category });
+            const out = await geminiGenerateSmellEN({ character: formalCharacterName, category });
             console.log("Gemini response length:", out ? out.length : 0);
             console.log("Gemini response preview:", out ? out.slice(0, 200) : "EMPTY");
             
@@ -933,8 +1233,8 @@ app.post("/api/smell", async (req, res) => {
             let finalName = formalCharacterName;
             
             if (sheetName && sheetName.length > 0) {
-              // Usar el nombre extraído de la ficha
-              finalName = sheetName;
+              // Usar nombre extraído, pero re-canonizar con índice local
+              finalName = resolveCanonicalCharacterName(sheetName, prompt);
               // Si es diferente al que teníamos, registrarlo
               if (finalName !== formalCharacterName) {
                 registerCharacter(normalizeCharacterName(prompt), finalName);
@@ -983,7 +1283,8 @@ app.post("/api/smell", async (req, res) => {
     });
 
     // Extraer el nombre oficial de la ficha DEL TEXTO, sin importar si fue caché o generado
-    const finalSheetName = extractCharacterNameFromSheet(textEn) || formalCharacterName;
+    const extractedSheetName = extractCharacterNameFromSheet(textEn) || formalCharacterName;
+    const finalSheetName = resolveCanonicalCharacterName(extractedSheetName, prompt);
     if (finalSheetName && finalSheetName !== formalCharacterName) {
       registerCharacter(normalizeCharacterName(prompt), finalSheetName);
       formalCharacterName = finalSheetName;
@@ -1001,7 +1302,7 @@ app.post("/api/smell", async (req, res) => {
         const imageResp = await getImageForCharacter({
           name: formalCharacterName,
           category: category || "any",
-          style: "anime",
+          style: "auto",
           lang: "en",
           universe,
         });
@@ -1051,17 +1352,24 @@ app.post("/api/smell", async (req, res) => {
       }
     })();
 
-    // Return the main response immediately with text
-    // Image and translation will be available soon (can be fetched separately or bundled)
+    let textEsForResponse = "";
+    if (requestedLang === "es") {
+      textEsForResponse = await translationPromise;
+    }
+
+    // Return main response (includes ES when requestedLang=es)
     const response = {
       text: textEn,
       textEn,
-      textEs: "", // Will be filled via separate request or polling
+      textEs: textEsForResponse || "",
       cached,
       sourceLang: "en",
       requestedLang,
       officialName: formalCharacterName,
       normalizedSearch,
+      requestedCategory: normalizeCategoryId(requestedCategory),
+      resolvedCategory: category,
+      categoryOverridden,
       timings, // Include timing info in response
     };
 
@@ -1076,9 +1384,10 @@ app.post("/api/smell", async (req, res) => {
     });
   } catch (e) {
     console.error("Smell endpoint error:", e.message);
-    return res.status(500).json({
-      error: "Failed to generate",
-      details: String(e?.message || e),
+    const safe = toClientSafeErrorDetails(e);
+    return res.status(safe.status).json({
+      error: safe.error,
+      details: safe.details,
     });
   }
 });
@@ -1089,12 +1398,30 @@ app.post("/api/translate", async (req, res) => {
     const text = String(req.body?.text || "").trim();
     const targetLang = normalizeLang(req.body?.lang || "es");
     const characterName = String(req.body?.character || "").trim();
-    const category = String(req.body?.category || "any").trim();
+    const requestedCategory = String(req.body?.category || "any").trim();
+    let category = normalizeCategoryId(requestedCategory);
 
     if (!text) return res.status(400).json({ error: "Missing text" });
 
+    const canonicalName = characterName
+      ? toCanonicalDisplayName(resolveCanonicalCharacterName(characterName, characterName))
+      : "";
+
+    if (canonicalName) {
+      const inferred = await inferCharacterNatureCategory(canonicalName, category);
+      if (inferred) category = inferred;
+      const smellCacheHit = await getCachedSmell({
+        name: canonicalName,
+        category,
+        lang: targetLang,
+      });
+      if (smellCacheHit?.text) {
+        return res.json({ text: smellCacheHit.text, fromCache: true, source: "smell-cache" });
+      }
+    }
+
     // Normalizar nombre para caché
-    const normalizedName = characterName ? normalizeCharacterName(characterName) : "";
+    const normalizedName = canonicalName ? normalizeCharacterName(canonicalName) : "";
     const cacheKey = `resp::${targetLang}::${normalizedName}::${normKey(category)}`;
 
     // Buscar en caché
@@ -1106,8 +1433,17 @@ app.post("/api/translate", async (req, res) => {
     // Si no está en caché, traducir
     const translated = await geminiTranslate(text, targetLang);
     responseCache.set(cacheKey, translated);
+    if (canonicalName && translated) {
+      await setCachedSmell({
+        name: canonicalName,
+        category,
+        lang: targetLang,
+        text: translated,
+        provider: "gemini-translate",
+      });
+    }
 
-    return res.json({ text: translated, fromCache: false });
+    return res.json({ text: translated, fromCache: false, source: "gemini" });
   } catch (e) {
     return res.status(500).json({
       error: "Translation failed",
@@ -1201,7 +1537,7 @@ app.post("/api/ai-image", async (req, res) => {
   const body = req.body || {};
   const name = String(body?.name || "").trim();
   const category = String(body?.category || "any").trim();
-  const style = String(body?.style || "anime").trim();
+  const style = String(body?.style || "auto").trim();
   const universe = String(body?.universe || "").trim();
   const lang = String(body?.lang || "en").trim();
 
@@ -1220,7 +1556,7 @@ app.post("/api/ai-image", async (req, res) => {
 app.get("/api/ai-image", async (req, res) => {
   const name = String(req.query?.name || "").trim();
   const category = String(req.query?.category || "any").trim();
-  const style = String(req.query?.style || "anime").trim();
+  const style = String(req.query?.style || "auto").trim();
   const universe = String(req.query?.universe || "").trim();
   const lang = String(req.query?.lang || "en").trim();
 
