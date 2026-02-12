@@ -2471,6 +2471,38 @@ color: rgba(245,250,255,.96) !important;
     color:#fff;
     border:1px solid rgba(255,255,255,.18);
   }
+
+  /* Final mobile nav override: keep in-app sections fixed and disable hamburger/drawer. */
+  @media (max-width: 768px){
+    .topbar-left{
+      display: none !important;
+    }
+
+    .nav-drawer-btn{
+      display: none !important;
+      pointer-events: none !important;
+      visibility: hidden !important;
+    }
+
+    .drawer{
+      display: none !important;
+      visibility: hidden !important;
+      pointer-events: none !important;
+    }
+
+    .app-tabs{
+      display: flex !important;
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 1400;
+    }
+
+    .app-shell{
+      padding-bottom: 110px;
+    }
+  }
 </style>
 </head>
 
