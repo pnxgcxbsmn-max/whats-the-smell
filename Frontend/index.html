@@ -3,10 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0b0f1a" />
   <meta http-equiv="Cache-Control" content="public, max-age=3600" />
   <meta http-equiv="Pragma" content="public" />
   <meta http-equiv="Expires" content="3600" />
   <meta name="description" content="Fragrance identification for fictional characters" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/brand/logo.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/pwa/apple-touch-icon.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
 
   <!-- Development Environment Setup -->
   <script>
@@ -2474,8 +2478,50 @@ color: rgba(245,250,255,.96) !important;
 
   /* Final mobile nav override: keep in-app sections fixed and disable hamburger/drawer. */
   @media (max-width: 768px){
+    .topbar{
+      grid-template-columns: 1fr auto !important;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      margin-bottom: 10px;
+    }
+
     .topbar-left{
       display: none !important;
+    }
+
+    .topbar-center{
+      justify-content: flex-start !important;
+      grid-column: 1;
+    }
+
+    .topbar-right{
+      justify-content: flex-end !important;
+      grid-column: 2;
+    }
+
+    .appLogo{
+      width: 170px !important;
+      height: 72px !important;
+      margin: 0 !important;
+      justify-content: flex-start !important;
+    }
+
+    .langBox{
+      min-width: 168px;
+      width: auto;
+      padding: 4px;
+      margin-top: 0;
+    }
+
+    .langSwitch{
+      height: 32px;
+      max-width: 170px;
+    }
+
+    .langOption{
+      font-size: 12px;
+      font-weight: 800;
     }
 
     .nav-drawer-btn{
@@ -2497,10 +2543,91 @@ color: rgba(245,250,255,.96) !important;
       right: 0;
       bottom: 0;
       z-index: 1400;
+      padding: 8px 8px 12px;
+      gap: 6px;
+    }
+
+    .app-tab-btn{
+      padding: 5px 6px;
+      border-radius: 10px;
+      gap: 4px;
+      font-size: 10px;
+      letter-spacing: .35px;
+      min-height: 52px;
+    }
+
+    .app-tab-btn svg{
+      width: 15px;
+      height: 15px;
+    }
+
+    .app-tab-btn .menu-badge{
+      top: 6px;
+      right: 14px;
     }
 
     .app-shell{
       padding-bottom: 110px;
+    }
+
+    .app-grid{
+      gap: 12px;
+    }
+
+    .left,
+    .right{
+      padding: 14px;
+    }
+
+    .sectionTitle{
+      margin: 8px 0 8px;
+      font-size: 13px;
+    }
+
+    #outputLabel,
+    #visualTitle1,
+    #visualTitle2,
+    #curiosityTitle{
+      margin-top: 10px !important;
+      margin-bottom: 8px !important;
+    }
+
+    .outputBox{
+      min-height: 150px;
+    }
+
+    .visualRow{
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+
+    #detailCard{
+      margin-top: 0 !important;
+    }
+
+    .library-controls,
+    .favorites-controls,
+    .feedback-fields{
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .library-controls input,
+    .library-controls select,
+    .feedback-fields input,
+    .feedback-fields select,
+    .feedback-fields textarea{
+      flex: 1 1 100%;
+      min-height: 40px;
+      padding: 8px 10px;
+      font-size: 12px;
+      border-radius: 10px;
+    }
+
+    .empty-state{
+      margin: 10px 0;
+      padding: 12px;
+      font-size: 12px;
     }
   }
 </style>
@@ -2856,13 +2983,13 @@ color: rgba(245,250,255,.96) !important;
   </script>
 
   <!-- Gateway module: defines GATEWAY global (must load first) -->
-  <script src="gateway.js?v=20260211c"></script>
+  <script src="gateway.js?v=20260212a"></script>
   <!-- Gate UI: access-gate.js -->
   <script src="access-gate.js?v=20260211b"></script>
   <!-- html2canvas for feedback screenshots -->
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" defer></script>
   <!-- Main app: uses GATEWAY module -->
-  <script src="app.js?v=20260211c" defer></script>
+  <script src="app.js?v=20260212a" defer></script>
   <script>
     const IS_LOCAL = ["localhost", "127.0.0.1"].includes(window.location.hostname);
     const ENABLE_SW = !IS_LOCAL;

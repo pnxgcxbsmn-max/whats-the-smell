@@ -901,12 +901,10 @@ async function tryLoadCachedGeneratedImage(charName) {
       }
       return;
     }
-    document.body.classList.add("show-detail");
-    document.body.classList.add("detail-animating");
-    if (originEl) {
-      animateDetailLift(originEl);
-    }
-    setTimeout(() => document.body.classList.remove("detail-animating"), 420);
+    // Mobile: keep detail inline to avoid jump/overlay behavior.
+    // This preserves the favorite action while preventing disruptive card lift.
+    document.body.classList.remove("show-detail");
+    document.body.classList.remove("detail-animating");
   }
 
   function closeDetailPanel() {
@@ -927,9 +925,9 @@ async function tryLoadCachedGeneratedImage(charName) {
     const hasResult = !!state.hasResult && !!state.detail;
     const showFavorite = hasResult;
     const showDownload = hasResult && isDesktop();
-    const showCapture = hasResult && isMobile();
-    const showBack = hasResult && isMobile();
-    const showClose = hasResult && isMobile();
+    const showCapture = false;
+    const showBack = false;
+    const showClose = false;
 
     if (el.favoriteToggle) {
       el.favoriteToggle.classList.toggle("is-visible", showFavorite);
@@ -1070,6 +1068,7 @@ async function tryLoadCachedGeneratedImage(charName) {
     if (el.librarySearchInput) {
       el.librarySearchInput.placeholder = t("librarySearchPlaceholder");
     }
+    updateLibrarySortOptionLabels();
     populateLibraryCategoryFilter();
     renderLibraryList();
     renderFavoritesList();
@@ -1079,6 +1078,18 @@ async function tryLoadCachedGeneratedImage(charName) {
     // Category display
     const label = categoryLabelFor(state.selectedCategory);
     el.categoryValue.textContent = label;
+  }
+
+  function updateLibrarySortOptionLabels() {
+    if (!el.librarySortSelect) return;
+    const sortOptions = {
+      recent: t("librarySortRecent"),
+      oldest: t("librarySortOldest"),
+      az: t("librarySortAZ"),
+    };
+    Array.from(el.librarySortSelect.options).forEach((opt) => {
+      if (sortOptions[opt.value]) opt.textContent = sortOptions[opt.value];
+    });
   }
 
   // ===== Locks =====
@@ -2202,14 +2213,7 @@ async function tryLoadCachedGeneratedImage(charName) {
         renderLibraryList();
       });
       el.librarySortSelect.value = state.libraryFilters.sort;
-      const sortOptions = {
-        recent: t("librarySortRecent"),
-        oldest: t("librarySortOldest"),
-        az: t("librarySortAZ"),
-      };
-      Array.from(el.librarySortSelect.options).forEach((opt) => {
-        if (sortOptions[opt.value]) opt.textContent = sortOptions[opt.value];
-      });
+      updateLibrarySortOptionLabels();
     }
     if (el.libraryList) {
       el.libraryList.addEventListener("click", handleLibraryListClick);
@@ -2745,6 +2749,31 @@ async function tryLoadCachedGeneratedImage(charName) {
 
   function noteToIcon(note) {
     const n = normNote(note);
+    const hasAny = (...parts) => parts.some((p) => n.includes(p));
+
+    // High-priority explicit aliases to reduce generic fallback in real outputs.
+    if (hasAny("white musk", "almizcle blanco")) return "assets/notes/085_skin-musk.svg";
+    if (hasAny("musk", "almizcle")) return "assets/notes/085_skin-musk.svg";
+    if (hasAny("steel", "acero", "metal")) return "assets/notes/017_hot-metal.svg";
+    if (hasAny("bamboo", "bambu")) return "assets/notes/051_fresh-cut-grass.svg";
+    if (hasAny("green tea", "te verde", "matcha")) return "assets/notes/059_tea-leaf.svg";
+    if (hasAny("dry sand", "sun-baked earth", "arena seca", "arena")) return "assets/notes/027_dust.svg";
+    if (hasAny("wet earth", "damp soil", "tierra humeda", "suelo humedo")) return "assets/notes/021_earth.svg";
+    if (hasAny("gun oil", "machine oil", "aceite")) return "assets/notes/016_tar.svg";
+    if (hasAny("forest", "bosque")) return "assets/notes/024_moss.svg";
+    if (hasAny("sage", "salvia")) return "assets/notes/056_sage.svg";
+    if (hasAny("kumquat", "quinoto")) return "assets/notes/045_lime.svg";
+    if (hasAny("zest", "cascara")) return "assets/notes/041_lemon.svg";
+    if (hasAny("broth", "caldo", "miso")) return "assets/notes/073_coffee.svg";
+    if (hasAny("ash", "ceniza")) return "assets/notes/012_charcoal.svg";
+    if (hasAny("burnt", "quemado", "scorched", "chamuscado")) return "assets/notes/013_ember.svg";
+    if (hasAny("blood", "sangre")) return "assets/notes/028_iron.svg";
+    if (hasAny("leaves", "leaf", "hojas", "hoja")) return "assets/notes/051_fresh-cut-grass.svg";
+    if (hasAny("cloth", "fabric", "tela", "ropa")) return "assets/notes/083_fresh-linen.svg";
+    if (hasAny("detergent", "detergente")) return "assets/notes/089_laundry.svg";
+    if (hasAny("ambergris")) return "assets/notes/005_amber-resin.svg";
+    if (hasAny("smog")) return "assets/notes/011_smoke.svg";
+    if (hasAny("electricity", "electricidad")) return "assets/notes/091_ozone.svg";
 
     // Woods & Resins (001-010)
     if (n.includes("cedar") || n.includes("cedro")) return "assets/notes/001_cedar.svg";

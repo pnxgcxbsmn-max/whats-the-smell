@@ -127,11 +127,20 @@ app.use(express.json({ limit: "5mb" }));
 
 // OPTIMIZATION: Static files with aggressive caching headers
 app.use(express.static(FRONTEND_DIR, {
-  maxAge: '0',
-  etag: false,
+  maxAge: "1h",
+  etag: true,
   lastModified: true,
-  setHeaders: (res) => {
-    res.setHeader('Cache-Control', 'no-store');
+  setHeaders: (res, filePath) => {
+    const file = String(filePath || "").toLowerCase();
+    if (file.endsWith(".html")) {
+      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+      return;
+    }
+    if (/\.(js|css|png|jpg|jpeg|webp|svg|woff|woff2|ttf|ico)$/.test(file)) {
+      res.setHeader("Cache-Control", "public, max-age=86400, stale-while-revalidate=604800");
+      return;
+    }
+    res.setHeader("Cache-Control", "public, max-age=3600");
   }
 }));
 
