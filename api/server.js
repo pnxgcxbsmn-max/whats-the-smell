@@ -701,7 +701,7 @@ async function generateImageWithOpenAI({ prompt, seed = 42, width = 768, height 
 
   if (categoryLower.includes("anime") || categoryLower.includes("manga")) {
     primaryModel = MODEL_OPENAI;
-    fallbackModel = MODEL_SEEDREAM;
+    fallbackModel = null;
   } else if (categoryLower.includes("game") || categoryLower.includes("video")) {
     primaryModel = MODEL_SEEDREAM;
     fallbackModel = MODEL_OPENAI;
@@ -726,7 +726,7 @@ async function generateImageWithOpenAI({ prompt, seed = 42, width = 768, height 
   }
 
   const url = "https://api.aimlapi.com/v1/images/generations";
-  let models = [primaryModel, fallbackModel];
+  let models = [primaryModel, fallbackModel].filter(Boolean);
   let lastError = null;
 
   for (const model of models) {
