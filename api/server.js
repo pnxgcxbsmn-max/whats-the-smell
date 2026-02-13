@@ -41,14 +41,14 @@ if (!GEMINI_API_KEY) {
 if (!OPENAI_API_KEY) {
   console.error("Missing OPENAI_API_KEY in api/.env");
   console.error("⚠️  IMPORTANT: OPENAI_API_KEY must be a valid API ML API key (from aimlapi.com)");
-  console.error("   Used for: bytedance/seedream-4-5 (Comics) and openai/gpt-image-1 (other categories)");
+  console.error("   Used for: bytedance/seedream-4-5 (Comics) and openai/gpt-image-1-5 (other categories)");
   process.exit(1);
 }
 
 console.log("✓ Using API ML API with model selection based on category");
 console.log("  - Comics: bytedance/seedream-4-5 (no copyright restrictions)");
-console.log("  - Others: openai/gpt-image-1");
-console.log("✓ Using Seedream 4.5 for Comics | Using OpenAI gpt-image-1 for other categories");
+console.log("  - Others: openai/gpt-image-1-5");
+console.log("✓ Using Seedream 4.5 for Comics | Using OpenAI gpt-image-1-5 for other categories");
 
 const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 const __filename = fileURLToPath(import.meta.url);
@@ -690,12 +690,26 @@ Quality:
 }
 
 async function generateImageWithOpenAI({ prompt, seed = 42, width = 768, height = 768, category = "any" }) {
-  // Model selection based on category; use AIML API IDs (no vendor prefix)
+  // Model selection based on category; use AIMLAPI model IDs
   const categoryLower = String(category || "").toLowerCase();
 
+  function normalizeAIMLImageModelId(rawModel) {
+    const model = String(rawModel || "").trim();
+    const lower = model.toLowerCase();
+    if (!lower) return "openai/gpt-image-1-5";
+    if (lower === "gpt-image-1") return "openai/gpt-image-1";
+    if (lower === "gpt-image-1-mini") return "openai/gpt-image-1-mini";
+    if (lower === "gpt-image-1.5" || lower === "gpt-image-1-5") return "openai/gpt-image-1-5";
+    return model;
+  }
+
   // AIMLAPI currently exposes these IDs; adjust here if your account uses different ones
-  const MODEL_OPENAI = process.env.IMG_MODEL_PRIMARY || "gpt-image-1";
-  const MODEL_SEEDREAM = process.env.IMG_MODEL_FALLBACK || "bytedance/seedream-4-5";
+  const MODEL_OPENAI = normalizeAIMLImageModelId(
+    process.env.IMG_MODEL_PRIMARY || "openai/gpt-image-1-5"
+  );
+  const MODEL_SEEDREAM = normalizeAIMLImageModelId(
+    process.env.IMG_MODEL_FALLBACK || "bytedance/seedream-4-5"
+  );
 
   let primaryModel, fallbackModel;
 
