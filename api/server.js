@@ -491,202 +491,76 @@ async function storeImageBlob({ cacheKey, contentType, base64 }) {
   return { imageId, imageUrl: `/api/image/${imageId}` };
 }
 
+function buildIdCardPrompt({ categoryName, subject, mood = "", extras = "" }) {
+  const ID_FRAME = `
+ID photo, passport-style portrait, front-facing, eye-level,
+centered composition, head and shoulders only,
+neutral plain background, soft even lighting,
+sharp focus, symmetrical framing, calm natural expression,
+minimal shadows, no props, no text, no watermark,
+no full body, no action pose, no dynamic angle
+`.trim();
+
+  const QUALITY = `
+high quality, high detail, clean professional portrait
+`.trim();
+
+  const STYLE_MAP = {
+    anime: `
+2D anime illustration, clean sharp line art, cel shading,
+expressive eyes, stylized hair, vibrant but natural colors,
+no realism, no 3D render
+`.trim(),
+  };
+
+  const FALLBACK_STYLE = `
+portrait illustration style based on category: ${categoryName},
+keep it as an ID headshot (no scenes), consistent stylization, clean finish
+`.trim();
+
+  const styleKey = String(categoryName || "").toLowerCase().trim();
+  const STYLE = STYLE_MAP[styleKey] || FALLBACK_STYLE;
+  const SUBJECT = `Subject: ${subject}`.trim();
+  const MOOD = mood ? `Expression/Mood: ${mood}, subtle, ID-photo appropriate` : "";
+  const EXTRAS = extras ? `Details: ${extras} (keep minimal, within ID portrait constraints)` : "";
+
+  const NEGATIVE = `
+Negative: full body, action pose, dynamic angle, tilted camera,
+busy background, scenery, text, logo, watermark, frame, badge, ID numbers,
+blurry, low detail, extra limbs, deformed face, extreme shadows, cinematic scene
+`.trim();
+
+  return [QUALITY, ID_FRAME, STYLE, SUBJECT, MOOD, EXTRAS, NEGATIVE]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
 function buildImagePrompt(name, category, style, universe = "") {
   const base = String(name || "").trim();
   const univ = String(universe || "").trim();
-  const cat = String(category || "").trim();
+  const cat = normalizeCategoryId(category) || String(category || "any").trim().toLowerCase() || "any";
   const styleHint = String(style || "").trim().toLowerCase();
-  const normalized = normalizeCharacterName(base);
 
-  const VISUAL_BIBLE = {
-    "captain america": {
-      canon: "Steve Rogers",
-      traits: [
-        "adult athletic male, square jaw, clean-shaven",
-        "blue tactical suit with white star centered on chest",
-        "red-white-blue palette, combat straps and gloves",
-        "short neat light-brown/blond hair",
-      ],
-      forbid: ["anime hairstyle", "wrong superhero logo", "casual civilian outfit"],
-    },
-    "choso": {
-      canon: "Choso (Jujutsu Kaisen)",
-      traits: [
-        "pale skin, long dark hair tied back",
-        "distinct dark blood-mark face paint across nose and under eyes",
-        "black high-collar outfit with layered sleeves",
-      ],
-      forbid: ["muscular armor", "bright colorful shonen costume", "different face markings"],
-    },
-    "chozo": {
-      canon: "Chozo race (Metroid)",
-      traits: [
-        "avian humanoid alien with beak-like facial structure",
-        "ancient advanced armor motifs, metallic and ceremonial",
-        "regal stoic posture",
-      ],
-      forbid: ["human face", "anime school uniform", "modern civilian clothes"],
-    },
-    "goku black": {
-      canon: "Goku Black (Dragon Ball Super)",
-      traits: [
-        "spiky black Goku-style hair",
-        "dark grey/black gi with high collar, red sash belt",
-        "green Potara earring on one ear",
-      ],
-      forbid: ["orange gi", "Super Saiyan blond hair", "missing Potara earring"],
-    },
-    "link": {
-      canon: "Link (The Legend of Zelda)",
-      traits: [
-        "young heroic elf-like male with pointed ears",
-        "blond hair, blue/green iconic fantasy tunic style",
-        "Hylian adventurer aesthetic",
-      ],
-      forbid: ["modern urban clothes", "firearms", "non-elf ears"],
-    },
-    "madara": {
-      canon: "Madara Uchiha (Naruto)",
-      traits: [
-        "long wild black hair",
-        "pale skin, stern mature face",
-        "dark red segmented armor over shinobi clothing",
-      ],
-      forbid: ["short hair", "bright modern outfit", "child proportions"],
-    },
-    "steve hyuga": {
-      canon: "Steve Hyuga (custom profile in this app)",
-      traits: [
-        "adult male with Byakugan-inspired pale eyes",
-        "Hyuga-inspired ninja styling, calm and disciplined expression",
-        "neutral dark shinobi attire with subtle modern touch",
-      ],
-      forbid: ["cartoon mascot style", "superhero armor", "random franchise symbols"],
-    },
-    "suguru geto": {
-      canon: "Suguru Geto (Jujutsu Kaisen)",
-      traits: [
-        "long black hair tied in a half-up style",
-        "elongated earlobes, calm intimidating expression",
-        "dark monk-like robe outfit",
-      ],
-      forbid: ["short hair", "bright colorful battle suit", "modern casual hoodie"],
-    },
-    "tanjiro kamado": {
-      canon: "Tanjiro Kamado (Demon Slayer)",
-      traits: [
-        "short dark burgundy hair, scar on forehead",
-        "hanafuda earrings clearly visible",
-        "green-black checkered haori over demon slayer uniform",
-      ],
-      forbid: ["different earring style", "missing forehead scar", "modern clothing"],
-    },
-    "toji fushiguro": {
-      canon: "Toji Fushiguro (Jujutsu Kaisen)",
-      traits: [
-        "adult muscular male with short dark hair",
-        "sharp eyes, faint facial scar detail",
-        "tight black shirt / dark combat clothing",
-      ],
-      forbid: ["teen body proportions", "flashy fantasy armor", "bright hero costume"],
-    },
-    "naruto uzumaki": {
-      canon: "Naruto Uzumaki",
-      traits: [
-        "spiky blond hair, blue eyes, whisker-like cheek marks",
-        "orange-black shinobi outfit",
-        "metal Leaf Village forehead protector with engraved leaf symbol",
-      ],
-      forbid: ["different hair color", "no whisker marks", "non-ninja modern outfit", "text or lettering on forehead protector"],
-    },
-    "naruto": {
-      canon: "Naruto Uzumaki",
-      traits: [
-        "spiky blond hair, blue eyes, whisker-like cheek marks",
-        "orange-black shinobi outfit",
-        "metal Leaf Village forehead protector with engraved leaf symbol",
-      ],
-      forbid: ["different hair color", "no whisker marks", "non-ninja modern outfit", "text or lettering on forehead protector"],
-    },
-  };
+  const subjectParts = [
+    `Character: ${base || "Unknown"}`,
+    univ ? `Universe: ${univ}` : "",
+    `Category: ${cat}`,
+    "Use the single most iconic canonical look from official source material.",
+    "Maintain canonical face, hair, outfit, age, and recognizable franchise traits.",
+    "No redesign, no style fusion, no alternate version, no fan reinterpretation.",
+  ].filter(Boolean);
 
-  const anchor = VISUAL_BIBLE[normalized] || null;
-  const styleGuideByCategory = {
-    anime: "Official anime key visual style. Clean line art, cel shading, and anime-accurate facial proportions.",
-    games: "Official game key art style. Production-quality rendering matching the game's canonical look.",
-    movies: "Official source-medium style. Use live-action likeness for live-action franchises and animation style for animated franchises.",
-    comics: "Official comic-book illustration style. Strong inks, graphic shading, and canonical costume rendering.",
-    books: "Official book-cover illustration style consistent with the franchise adaptation language.",
-    cartoons: "Official cartoon style from the original series. Preserve simplified shapes and palette logic.",
-    myth: "Classical mythic illustration style with grounded historical motifs (not modern cosplay).",
-  };
-  const categoryKey = normalizeCategoryId(cat) || "any";
-  const fallbackStyleGuide = styleGuideByCategory[categoryKey] || "Official franchise visual language matching the original source material.";
-  const styleLine = styleHint && styleHint !== "auto" && styleHint !== "any"
-    ? `Requested style mode: ${styleHint}. Keep identity 1:1 canonical while applying only this source-consistent rendering mode.`
-    : `Style mode: auto by category (${categoryKey}). ${fallbackStyleGuide}`;
+  const mood = "calm, neutral, recognizable";
+  const extras = styleHint && styleHint !== "auto" && styleHint !== "any"
+    ? `Respect requested style hint: ${styleHint}`
+    : "Official canonical styling only";
 
-  const identityLines = anchor
-    ? [
-        `Canonical target: ${anchor.canon}`,
-        "Mandatory visual anchors:",
-        ...anchor.traits.map((t) => `- ${t}`),
-        "Strict negatives:",
-        ...anchor.forbid.map((f) => `- ${f}`),
-      ].join("\n")
-    : [
-        "Canonical target: Use the single most iconic official design for this character.",
-        "- Resolve to one franchise/universe only (no fusion or mixed continuities).",
-        "- Prefer default/base form outfit and appearance (not event skins, alternates, or fan variants).",
-        "- If universe is missing, infer the most globally recognized canonical universe from the name.",
-      ].join("\n");
-
-  // Template mejorado con datos de ficha
-  const prompt = `Ultra-accurate canonical character illustration.
-
-Character identity:
-Name: ${base}
-Universe: ${univ || "Unknown"}
-Category/Role: ${cat || "Character"}
-${identityLines}
-${styleLine}
-
-Identity rules (MANDATORY):
-- The character must match the official canonical appearance from the specified universe
-- Facial structure, hairstyle, clothing, age, and proportions must align with official source material
-- No redesigns, no reinterpretations, no alternate universe versions
-- Maintain original ethnicity, gender, and physical traits
-- The character must be immediately recognizable to fans of the universe
-
-Style:
-- Official illustration style consistent with the source universe
-- Clean, professional line art
-- High-quality shading and accurate color palette
-- Not realistic unless the universe is realistic
-- Not westernized unless the universe is western
-
-Composition:
-- Centered portrait (bust or half-body)
-- Neutral or universe-consistent background
-- Clear facial visibility
-
-Strictly prohibited:
-- Fan art reinterpretations
-- Style fusion with other franchises
-- Costume changes
-- Age changes
-- Hair or eye color variation
-- Accessories not present in canon
-- Text, logos, watermarks, signatures, UI overlays in the image
-
-Quality:
-- Masterpiece
-- High fidelity
-- Consistent anatomy
-- High facial likeness
-- Instant recognizability for franchise fans`;
-
-  return prompt;
+  return buildIdCardPrompt({
+    categoryName: cat,
+    subject: subjectParts.join(". "),
+    mood,
+    extras,
+  });
 }
 
 async function generateImageWithOpenAI({ prompt, seed = 42, width = 768, height = 768, category = "any" }) {
